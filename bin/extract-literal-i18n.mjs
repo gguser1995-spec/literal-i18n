@@ -8,7 +8,7 @@ const { loadEnvConfig } = nextEnv;
 loadEnvConfig(process.cwd(), true, console, true);
 loadLiteralI18nDevelopmentEnv();
 const require = createRequire(import.meta.url);
-const { LiteralI18nExtractor } = require('../src/i18n/extract-core.cjs');
+const { LiteralI18nExtractor } = require('../src/extract-core.cjs');
 
 function loadLiteralI18nDevelopmentEnv() {
   const envPath = '.env.development';
