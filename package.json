@@ -1,0 +1,91 @@
+{
+  "name": "literal-i18n",
+  "version": "0.1.0",
+  "description": "Literal-string driven i18n for React and Next.js with AST extraction, hash keys, and pluggable translation hooks.",
+  "keywords": [
+    "i18n",
+    "react",
+    "nextjs",
+    "translation",
+    "ast",
+    "localization"
+  ],
+  "license": "MIT",
+  "author": "lwfux",
+  "homepage": "https://gitee.com/lwfux/literal-i18n",
+  "repository": {
+    "type": "git",
+    "url": "git+https://gitee.com/lwfux/literal-i18n.git"
+  },
+  "bugs": {
+    "url": "https://gitee.com/lwfux/literal-i18n/issues"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "bin",
+    "dist",
+    "docs",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "bin": {
+    "literal-i18n-extract": "./bin/extract-literal-i18n.mjs"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "import": "./dist/server.js"
+    },
+    "./next": {
+      "types": "./src/next-plugin.d.ts",
+      "import": "./src/next-plugin.cjs",
+      "require": "./src/next-plugin.cjs",
+      "default": "./src/next-plugin.cjs"
+    },
+    "./extract-core": {
+      "types": "./src/extract-core.d.ts",
+      "import": "./src/extract-core.cjs",
+      "require": "./src/extract-core.cjs",
+      "default": "./src/extract-core.cjs"
+    },
+    "./local-translate-api": {
+      "types": "./src/local-translate-api.d.ts",
+      "import": "./src/local-translate-api.cjs",
+      "require": "./src/local-translate-api.cjs",
+      "default": "./src/local-translate-api.cjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsup src/index.ts src/server.ts --format esm --dts --external react --external react/jsx-runtime --external next --clean",
+    "check": "tsc --noEmit",
+    "extract": "node bin/extract-literal-i18n.mjs src --out messages/en.json --source-map-out messages/source-map.json"
+  },
+  "dependencies": {
+    "@next/env": "^15.0.0",
+    "typescript": "^5.0.0"
+  },
+  "peerDependencies": {
+    "next": ">=14",
+    "react": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "next": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.0.0",
+    "tsup": "^8.0.0"
+  }
+}
