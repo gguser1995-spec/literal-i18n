@@ -31,7 +31,7 @@
     "LICENSE"
   ],
   "bin": {
-    "literal-i18n-extract": "./bin/extract-literal-i18n.mjs"
+    "literal-i18n-extract": "bin/extract-literal-i18n.mjs"
   },
   "exports": {
     ".": {
