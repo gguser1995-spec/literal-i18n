@@ -21,14 +21,6 @@ import { T } from 'literal-i18n';
 
 翻译后的文案也可以调整占位符位置，只要保留 `{aa}` 即可。
 
-非组件环境：
-
-```ts
-import { tr } from 'literal-i18n';
-
-tr('Hello {name}', { name: user.name });
-```
-
 服务端请求级翻译：
 
 ```ts
@@ -56,6 +48,8 @@ const { tr: t } = await getLocaleTranslator(locale);
 
 t('Hello {name}', { name: user.name });
 ```
+
+如果你不在 React 组件里，推荐显式创建 request-scoped translator，而不是直接使用全局 `tr`。全局 `tr` 不会自动知道当前 locale；在 Next.js 这类并发请求环境里，当前语言应该来自当前 request、route params 或你自己的上下文。
 
 ## Next.js 接入
 
@@ -233,6 +227,148 @@ import { I18nProvider } from 'literal-i18n';
 }
 ```
 
+## API Reference
+
+### `literal-i18n`
+
+`T`
+
+React 组件，适合组件树内使用。`text` 必须是静态字符串，其他 props 会作为占位符参数。
+
+```tsx
+<T text="Hello {name}" name={user.name} />
+<T text="my name is {aa}" aa={<span>Tom</span>} />
+```
+
+`I18nProvider`
+
+向组件树注入当前语言和消息字典。`messages` 是扁平 JSON。`translate` 可选，传入后会完全接管运行时翻译逻辑。
+
+```tsx
+<I18nProvider
+  locale={locale}
+  messages={messages}
+  keyMode="hash"
+  idPrefix="m_"
+  idLength={16}
+>
+  {children}
+</I18nProvider>
+```
+
+`useTranslate()` / `useI18n()`
+
+在组件中读取当前 provider 的翻译函数或完整上下文。
+
+`createTranslator(options)`
+
+显式创建 translator，适合非组件环境、服务端工具函数、metadata、route handler 或测试。
+
+```ts
+import { createTranslator } from 'literal-i18n';
+
+const tr = createTranslator({
+  locale,
+  messages,
+  keyMode: 'hash',
+});
+
+tr('Hello {name}', { name: 'Tom' });
+```
+
+`tr(text, params?, locale?)`
+
+全局 hook 的调用入口。它不会自动加载 messages，也不会自动获取当前 locale。只有当你调用过 `setTranslateHook(...)` 时，它才会使用你注册的全局翻译实现；否则只做原文 fallback 和参数替换。
+
+```ts
+import { setTranslateHook } from 'literal-i18n';
+
+setTranslateHook((text, params, locale) => {
+  return myTranslate(text, locale, params);
+});
+```
+
+在 Next.js request-scoped 场景里，更推荐 `getTranslator()`、`getLocaleTranslator()` 或 `createTranslator()`，避免全局状态串请求。
+
+`setTranslateHook(hook)` / `resetTranslateHook()`
+
+注册或重置全局翻译 hook。适合 CLI、单例脚本、测试环境，谨慎用于服务端并发请求。
+
+`createMessageId(text, options)` / `getMessageKey(text, options)` / `getEnvMessageIdOptions()`
+
+用于 hash key 模式。`getMessageKey` 在 `keyMode: 'hash'` 时返回稳定 id，在 `source` 模式下返回原文。
+
+### `literal-i18n/server`
+
+`loadMessages(locale, localeDir?)`
+
+从 `${localeDir}/${locale}.json` 读取扁平消息字典。默认目录是 `src/messages`。
+
+`getTranslator(input?)`
+
+创建服务端 translator。未传 `locale` 时，会尝试读取 Next 的 `X-NEXT-INTL-LOCALE` header。
+
+```ts
+const tr = await getTranslator();
+tr('Server title');
+```
+
+`getLocaleTranslator(locale, options?)`
+
+当你已经有 locale 时使用。返回 `{ locale, messages, tr }`。
+
+```ts
+const { tr } = await getLocaleTranslator(locale);
+tr('Hello {name}', { name: 'Tom' });
+```
+
+### `literal-i18n/next`
+
+`withLiteralI18n(nextConfig, options)`
+
+Next.js webpack 插件包装器。常用 options：
+
+- `sourceDir` / `sourceDirs`：扫描目录，默认 `src`。
+- `sourceOutput`：源语言 JSON 输出路径，默认 `src/messages/en.json`。
+- `sourceMapOutput`：原文到 key 的 map 输出路径。
+- `localeDir`：目标语言 JSON 目录，默认 `src/messages`。
+- `locales`：需要维护的语言列表。
+- `sourceLocale`：源语言，默认 `en`。
+- `keyMode` / `idPrefix` / `idLength`：key 生成策略。
+- `importSources` / `serverImportSources`：AST 识别的 import source。
+- `translateHook`：逐条翻译缺失文案。
+- `translateJsonHook`：批量翻译缺失文案，推荐。
+- `onExtract`：抽取完成后的回调。
+- `keepStale`：是否保留已不再出现的旧文案，默认 `true`。
+- `treatSourceAsMissing`：目标语言值等于原文时是否视为缺失，默认 `true`。
+- `pruneLegacySourceKeys`：hash 模式迁移时是否清理旧原文 key，默认 `true`。
+- `progress` / `silent`：日志输出控制。
+
+### `literal-i18n/local-translate-api`
+
+这些 helper 只是现成实现，方便你快速接本地或在线翻译服务。更推荐的长期方式是按你的业务、术语表、缓存、重试、审校流程自己实现 `translateJsonHook` 或 `translateHook`。
+
+`createLocalTranslateJsonHook(options)`
+
+对接本地 REST 翻译 API。必须显式传 `endpoint`。
+
+```ts
+createLocalTranslateJsonHook({
+  endpoint: process.env.LITERAL_I18N_LOCAL_TRANSLATE_ENDPOINT!,
+  batchSize: 20,
+  timeoutMs: 120000,
+  prompt: 'Translate concise UI copy.',
+});
+```
+
+`createOpenAICompatibleTranslateJsonHook(options)`
+
+对接 OpenAI-compatible Chat Completions API。必须显式传 `baseUrl`、`apiKey` 和 `model`。
+
+`createDeepSeekTranslateJsonHook(options)`
+
+`createOpenAICompatibleTranslateJsonHook` 的命名别名，不内置 baseUrl 或 model。
+
 ## 自定义运行时翻译
 
 可以通过 `translate` 注入自己的运行时翻译逻辑：
@@ -258,13 +394,15 @@ setTranslateHook((text, params, locale) => {
 });
 ```
 
+注意：全局 hook 不会自动绑定请求 locale。服务端请求内请优先使用 request-scoped translator。
+
 ## 翻译生成 Hook
 
 Next 插件支持两种翻译生成 hook。
 
 翻译服务地址、在线 API 地址和模型名都需要显式配置；库不会内置 provider 默认值。
 
-包内置两个翻译 helper：
+推荐你优先实现自己的翻译函数，把术语表、缓存、重试、人工审校和日志接进来。你不想自己写时，也可以使用包内置的两个 helper：
 
 - `local`：本地 llama 翻译 API。
 - `deepseek`：DeepSeek 或其他兼容 OpenAI ChatCompletions 的在线 API。
