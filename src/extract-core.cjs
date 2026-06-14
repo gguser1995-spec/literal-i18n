@@ -207,8 +207,8 @@ function collectI18nImports(sourceFile, importSources, serverImportSources) {
       const localName = specifier.name.text;
 
       if (isRuntimeSource && importedName === 'T') components.add(localName);
-      if (isRuntimeSource && importedName === 'tr') functions.add(localName);
       if (isRuntimeSource && importedName === 'createTranslator') translatorFactories.add(localName);
+      if (isRuntimeSource && importedName === 'useTranslate') translatorFactories.add(localName);
       if (isServerSource && (importedName === 'getTranslator' || importedName === 'getLocaleTranslator')) {
         translatorFactories.add(localName);
       }

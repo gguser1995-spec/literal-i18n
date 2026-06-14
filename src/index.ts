@@ -10,9 +10,6 @@ export type {
 export {
   createTranslator,
   defaultTranslate,
-  resetTranslateHook,
-  setTranslateHook,
-  tr,
 } from './translator';
 export type {
   TranslateHook,
