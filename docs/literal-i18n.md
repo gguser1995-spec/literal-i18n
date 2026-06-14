@@ -71,9 +71,9 @@ export function Title() {
 ```ts
 import { getLocaleTranslator } from 'literal-i18n/server';
 
-const { tr } = await getLocaleTranslator(locale);
+const { tr: t } = await getLocaleTranslator(locale);
 
-tr('Hello {name}', { name: user.name });
+t('Hello {name}', { name: user.name });
 ```
 
 如果你希望从 Next request header 推断 locale：
@@ -81,9 +81,9 @@ tr('Hello {name}', { name: user.name });
 ```ts
 import { getTranslator } from 'literal-i18n/server';
 
-const tr = await getTranslator();
+const t = await getTranslator();
 
-tr('Server rendered text');
+t('Server rendered text');
 ```
 
 `getTranslator()`、`getLocaleTranslator()` 和 `createTranslator()` 返回的本地 translator 变量会被 AST 识别。
@@ -95,13 +95,13 @@ tr('Server rendered text');
 ```ts
 import { createTranslator } from 'literal-i18n';
 
-const tr = createTranslator({
+const t = createTranslator({
   locale,
   messages,
   keyMode: 'hash',
 });
 
-tr('Hello {name}', { name: 'Tom' });
+t('Hello {name}', { name: 'Tom' });
 ```
 
 ## Provider
@@ -247,7 +247,7 @@ t('Client text');
 
 ```ts
 const { tr } = await getLocaleTranslator(locale);
-tr('Server text');
+t('Server text');
 ```
 
 ```ts
