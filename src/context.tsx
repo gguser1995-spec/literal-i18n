@@ -22,6 +22,11 @@ interface I18nContextValue {
   translate: TranslateHook;
 }
 
+export interface UseTranslateResult {
+  locale?: string;
+  tr: TranslateHook;
+}
+
 export interface I18nProviderProps extends MessageIdOptions {
   children: ReactNode;
   locale?: string;
@@ -60,8 +65,12 @@ export function I18nProvider({
   return <I18nContext.Provider value={contextValue}>{children}</I18nContext.Provider>;
 }
 
-export function useTranslate(): TranslateHook {
-  return useContext(I18nContext).translate;
+export function useTranslate(): UseTranslateResult {
+  const { locale, translate } = useContext(I18nContext);
+
+  return useMemo(() => {
+    return { locale, tr: translate };
+  }, [locale, translate]);
 }
 
 export function useI18n(): I18nContextValue {

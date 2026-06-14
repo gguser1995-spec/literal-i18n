@@ -29,16 +29,20 @@ export async function getTranslator(
     locale?: string;
     messages?: TranslationMessages | null;
   } & MessageIdOptions,
-): Promise<TranslateHook> {
+): Promise<LocaleTranslator> {
   const locale = input?.locale ?? (await headers()).get(NEXT_INTL_LOCALE_HEADER) ?? 'en';
   const messages = input?.messages ?? await loadMessages(locale);
 
-  return createTranslator({
-    ...getEnvMessageIdOptions(),
-    ...input,
+  return {
     locale,
     messages,
-  });
+    tr: createTranslator({
+      ...getEnvMessageIdOptions(),
+      ...input,
+      locale,
+      messages,
+    }),
+  };
 }
 
 export async function getLocaleTranslator(

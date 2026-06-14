@@ -26,6 +26,7 @@ export {
 export type {
   I18nProviderProps,
   TProps,
+  UseTranslateResult,
 } from './context';
 export type {
   AfterExtractHook,

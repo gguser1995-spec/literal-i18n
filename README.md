@@ -56,9 +56,9 @@ import { T } from 'literal-i18n';
 import { useTranslate } from 'literal-i18n';
 
 export function Title() {
-  const t = useTranslate();
+  const { tr } = useTranslate();
 
-  return <h1>{t('I am a test')}</h1>;
+  return <h1>{tr('I am a test')}</h1>;
 }
 ```
 
@@ -71,9 +71,9 @@ export function Title() {
 ```ts
 import { getLocaleTranslator } from 'literal-i18n/server';
 
-const { tr: t } = await getLocaleTranslator(locale);
+const { tr } = await getLocaleTranslator(locale);
 
-t('Hello {name}', { name: user.name });
+tr('Hello {name}', { name: user.name });
 ```
 
 如果你希望从 Next request header 推断 locale：
@@ -81,12 +81,12 @@ t('Hello {name}', { name: user.name });
 ```ts
 import { getTranslator } from 'literal-i18n/server';
 
-const t = await getTranslator();
+const { tr } = await getTranslator();
 
-t('Server rendered text');
+tr('Server rendered text');
 ```
 
-`getTranslator()`、`getLocaleTranslator()` 和 `createTranslator()` 返回的本地 translator 变量会被 AST 识别。
+`useTranslate()`、`getTranslator()`、`getLocaleTranslator()` 解构出来的 `tr`，以及 `createTranslator()` 返回的本地函数，都会被 AST 识别。
 
 ## 非组件环境
 
@@ -241,13 +241,13 @@ import { getTranslator, getLocaleTranslator } from 'literal-i18n/server';
 ```
 
 ```tsx
-const t = useTranslate();
-t('Client text');
+const { tr } = useTranslate();
+tr('Client text');
 ```
 
 ```ts
 const { tr } = await getLocaleTranslator(locale);
-t('Server text');
+tr('Server text');
 ```
 
 ```ts
