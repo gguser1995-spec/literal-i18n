@@ -182,7 +182,10 @@ function withLiteralI18n(nextConfig = {}, options = {}) {
   const outputConfig = { ...nextConfig };
   const nextMajor = getInstalledNextMajor(options.cwd || process.cwd());
   let pluginAdded = false;
+  const isDevCommand = isNextDevCommand();
   const shouldStartDevWatch = shouldStartInternalDevWatch({ options, nextMajor });
+  const shouldSkipWebpackWatchExtraction =
+    shouldStartDevWatch || (isDevCommand && options.devWatch === false);
 
   if (nextMajor && nextMajor >= 16 && outputConfig.turbopack === undefined) {
     outputConfig.turbopack = {};
@@ -200,7 +203,7 @@ function withLiteralI18n(nextConfig = {}, options = {}) {
         config.plugins.push(new LiteralI18nNextPlugin({
           ...options,
           cwd: context.dir,
-          skipWebpackWatchExtraction: shouldStartDevWatch,
+          skipWebpackWatchExtraction: shouldSkipWebpackWatchExtraction,
         }));
         pluginAdded = true;
       }

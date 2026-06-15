@@ -82,6 +82,17 @@ For Next.js 16 or Turbopack builds, prepare an explicit extract script:
 - With Next.js 16 / Turbopack build, run `i18n:extract` before `next build`.
 - Without the Next plugin, or outside Next.js, use the CLI manually.
 
+If you do not want the Next plugin to extract automatically during development, disable dev watch:
+
+```ts
+export default withLiteralI18n(nextConfig, {
+  ...literalI18nConfig,
+  devWatch: false,
+});
+```
+
+`devWatch: true` forces the internal watcher in both Next.js 15 and Next.js 16 development. It scans once on startup, scans changed source files once per update, and skips webpack watch extraction to avoid duplicate scans.
+
 ## Configure next.config.ts
 
 ```ts
@@ -170,7 +181,7 @@ Watch mode:
 literal-i18n-extract --watch
 ```
 
-Use `--watch` when you are not using the Next plugin, or when you set `devWatch: false`. By default, Turbopack dev is watched by `withLiteralI18n`.
+Use `--watch` when you are not using the Next plugin, or when you set `devWatch: false` and want the CLI to own development extraction. By default, Next.js 15 dev is handled by webpack watch, while Next.js 16 / Turbopack dev is handled by the internal watcher.
 
 ## Configure I18nProvider
 
@@ -641,6 +652,12 @@ Common options:
 - `pruneLegacySourceKeys`
 - `progress` / `silent`
 - `devWatch`
+
+`devWatch` controls automatic extraction in development:
+
+- `true`: force the internal watcher in development. Startup and source changes are scanned, webpack watch extraction is skipped, and each change is extracted once.
+- `false`: do not extract automatically in development. Run the CLI manually, or use `literal-i18n-extract --watch`.
+- Unset: Next.js 15 defaults to webpack watch; Next.js 16 defaults to the internal watcher.
 
 ### `literal-i18n/local-translate-api`
 
