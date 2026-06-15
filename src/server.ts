@@ -1,5 +1,4 @@
 import path from 'node:path';
-import { createRequire } from 'node:module';
 import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
@@ -64,12 +63,6 @@ export async function loadLiteralI18nConfig(cwd = process.cwd()): Promise<Litera
   try {
     if (configPath.endsWith('.json')) {
       return normalizeConfigOptions(JSON.parse(await readFile(configPath, 'utf8')));
-    }
-
-    if (configPath.endsWith('.cjs')) {
-      const require = createRequire(import.meta.url);
-      const configModule = require(configPath);
-      return normalizeConfigOptions(configModule.default ?? configModule);
     }
 
     const configModule = await import(pathToFileURL(configPath).href);

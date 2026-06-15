@@ -1,6 +1,6 @@
 {
   "name": "literal-i18n",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Literal-string driven i18n for React and Next.js with AST extraction, hash keys, and pluggable translation hooks.",
   "keywords": [
     "i18n",
@@ -85,7 +85,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
-    "@types/react": "^18.0.0",
+    "@types/react": "^19.2.17",
     "tsup": "^8.0.0"
   }
 }
