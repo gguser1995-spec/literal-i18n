@@ -185,24 +185,18 @@ Use `--watch` when you are not using the Next plugin, or when you set `devWatch:
 
 ## Configure I18nProvider
 
-In App Router, load messages in your locale layout:
+In App Router, prefer `getI18nProviderProps(locale)` in the locale layout. It reads `literal-i18n.config.*` and loads the current locale JSON, `source-map.json`, `keyMode`, `idPrefix`, and `idLength` for you:
 
 ```tsx
 import { I18nProvider } from 'literal-i18n';
-import { loadMessages } from 'literal-i18n/server';
+import { getI18nProviderProps } from 'literal-i18n/server';
 
 export default async function LocaleLayout({ children, params }) {
   const { locale } = await params;
-  const messages = await loadMessages(locale);
+  const i18n = await getI18nProviderProps(locale);
 
   return (
-    <I18nProvider
-      locale={locale}
-      messages={messages}
-      keyMode="hash"
-      idPrefix="m_"
-      idLength={16}
-    >
+    <I18nProvider {...i18n}>
       {children}
     </I18nProvider>
   );
@@ -222,6 +216,8 @@ Messages are flat JSON:
 ```ts
 const messages = await loadMessages(locale, 'locales');
 ```
+
+If you use `loadMessages` manually with hash mode, also pass the key settings from config into `I18nProvider`. `getI18nProviderProps` is preferred because it avoids duplicating config.
 
 If your locale comes from route params such as `/en` or `/zh`, each locale normally maps to a separate route and works well with SSG/SSR.
 
@@ -646,10 +642,12 @@ Server helpers also use `source-map.json` as a runtime lookup aid. For example, 
 
 - `loadMessages(locale, localeDir?)`
 - `loadSourceMap(localeDir?)`
+- `loadLiteralI18nConfig(cwd?)`
+- `getI18nProviderProps(locale, options?)`
 - `getTranslator(input?)`
 - `getLocaleTranslator(locale, options?)`
 
-Common `getTranslator` / `getLocaleTranslator` options:
+Common `getI18nProviderProps` / `getTranslator` / `getLocaleTranslator` options:
 
 - `localeDir`: message directory, default `src/messages`
 - `sourceMap`: pass a source-map manually; when omitted, `${localeDir}/source-map.json` is loaded automatically

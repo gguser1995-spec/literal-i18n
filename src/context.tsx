@@ -31,6 +31,7 @@ export interface I18nProviderProps extends MessageIdOptions {
   children: ReactNode;
   locale?: string;
   messages?: TranslationMessages | null;
+  sourceMap?: TranslationMessages | null;
   translate?: TranslateHook;
 }
 
@@ -51,6 +52,7 @@ export function I18nProvider({
   children,
   locale,
   messages,
+  sourceMap,
   translate,
   keyMode,
   idPrefix,
@@ -59,9 +61,9 @@ export function I18nProvider({
   const contextValue = useMemo<I18nContextValue>(() => {
     return {
       locale,
-      translate: translate ?? createTranslator({ locale, messages, keyMode, idPrefix, idLength }),
+      translate: translate ?? createTranslator({ locale, messages, sourceMap, keyMode, idPrefix, idLength }),
     };
-  }, [idLength, idPrefix, keyMode, locale, messages, translate]);
+  }, [idLength, idPrefix, keyMode, locale, messages, sourceMap, translate]);
 
   return <I18nContext.Provider value={contextValue}>{children}</I18nContext.Provider>;
 }
