@@ -22,7 +22,7 @@ import { T } from 'literal-i18n';
 - key 模式：`source` 或 `hash`
 - 翻译方式：自己实现 `translateJsonHook`，或使用包里可选的 OpenAI-compatible helper
 
-推荐生产项目使用 hash key：
+推荐生产项目使用 hash key。你可以把这些值写在 `literal-i18n.config.mjs` 里；如果运行时也需要从环境读取，再同步到 `.env`：
 
 ```env
 NEXT_PUBLIC_LITERAL_I18N_KEY_MODE=hash
@@ -36,28 +36,14 @@ NEXT_PUBLIC_LITERAL_I18N_ID_LENGTH=16
 npm install literal-i18n
 ```
 
-如果你使用 Next.js 16 且开启 Turbopack，建议显式准备抽取脚本：
+建议先建一个独立配置文件，让 Next 插件和 CLI 共用同一份配置：
 
-```json
-{
-  "scripts": {
-    "i18n:extract": "literal-i18n-extract src --out src/messages/en.json --source-map-out src/messages/source-map.json",
-    "build": "npm run i18n:extract && next build"
-  }
-}
-```
-
-## 配置 next.config.ts
-
-```ts
-import type { NextConfig } from 'next';
-import withLiteralI18n from 'literal-i18n/next';
-
-const nextConfig: NextConfig = {};
-
-export default withLiteralI18n(nextConfig, {
+```js
+// literal-i18n.config.mjs
+export default {
   sourceDir: 'src',
   sourceOutput: 'src/messages/en.json',
+  sourceMapOutput: 'src/messages/source-map.json',
   localeDir: 'src/messages',
   locales: ['en', 'zh', 'de'],
   sourceLocale: 'en',
@@ -67,7 +53,45 @@ export default withLiteralI18n(nextConfig, {
   async translateJsonHook(input) {
     return await translateMissingTexts(input);
   },
-});
+};
+```
+
+CLI 会默认读取项目根目录下的 `literal-i18n.config.mjs`、`.js`、`.cjs`、`.ts` 或 `.json`。
+
+如果你使用 Next.js 16 或 Turbopack，建议显式准备抽取脚本：
+
+```json
+{
+  "scripts": {
+    "i18n:extract": "literal-i18n-extract",
+    "i18n:watch": "literal-i18n-extract --watch",
+    "build": "npm run i18n:extract && next build"
+  }
+}
+```
+
+这段 `i18n:extract` 不是所有项目都必须配置：
+
+- 使用 `withLiteralI18n` 且走 webpack 编译时，Next 插件会在 dev/watch/build 阶段自动抽取。
+- 使用 Next.js 16 / Turbopack 时，建议配置 `i18n:extract`，并在 `build` 前先执行它。
+- 不使用 Next 插件，或在非 Next 项目里使用时，需要通过 CLI 手动抽取。
+
+Turbopack 开发模式下，建议单独开一个终端运行：
+
+```bash
+npm run i18n:watch
+```
+
+## 配置 next.config.ts
+
+```ts
+import type { NextConfig } from 'next';
+import withLiteralI18n from 'literal-i18n/next';
+import literalI18nConfig from './literal-i18n.config.mjs';
+
+const nextConfig: NextConfig = {};
+
+export default withLiteralI18n(nextConfig, literalI18nConfig);
 ```
 
 会维护这些文件：
@@ -98,6 +122,47 @@ export default withOtherPlugin(
 ```bash
 next build --webpack
 ```
+
+## CLI 抽取
+
+默认用法：
+
+```bash
+literal-i18n-extract
+```
+
+它会自动读取项目根目录里的 `literal-i18n.config.*`。如果你需要指定配置文件：
+
+```bash
+literal-i18n-extract --config ./configs/i18n.mjs
+```
+
+也可以用参数临时覆盖配置：
+
+```bash
+literal-i18n-extract src \
+  --out src/messages/en.json \
+  --source-map-out src/messages/source-map.json \
+  --key-mode hash \
+  --id-prefix m_ \
+  --id-length 16 \
+  --locales en,zh,de \
+  --source-locale en
+```
+
+配置优先级：
+
+```txt
+命令行参数 > NEXT_PUBLIC_LITERAL_I18N_* 环境变量 > literal-i18n.config.* > 默认值
+```
+
+支持 watch 模式：
+
+```bash
+literal-i18n-extract --watch
+```
+
+`--watch` 适合 Turbopack 开发模式。webpack 模式下，`withLiteralI18n` 已经会通过 webpack hook 监听源码变化。
 
 ## 配置 I18nProvider
 
@@ -132,6 +197,28 @@ export default async function LocaleLayout({ children, params }) {
   "m_073083b5b1d08690": "你好世界"
 }
 ```
+
+`loadMessages` 的第二个参数可以自定义语言文件目录：
+
+```ts
+const messages = await loadMessages(locale, 'locales');
+```
+
+如果你的 locale 来自 route params，例如 `/en`、`/zh`，不同语言通常会进入不同路由，适合 SSG/SSR。
+
+如果你的 locale 来自 cookie、header 或 middleware/proxy，并且希望每次请求都按用户状态切换语言，需要让 Next 页面保持动态渲染：
+
+```ts
+import { headers } from 'next/headers';
+
+export default async function LocaleLayout({ children }) {
+  await headers(); // force dynamic when locale depends on request state
+
+  return children;
+}
+```
+
+否则 Next 可能把页面静态化，导致构建时读取的 messages 被固化。
 
 ## 组件内使用
 

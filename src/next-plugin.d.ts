@@ -37,6 +37,10 @@ export declare function withLiteralI18n(
   options?: LiteralI18nPluginOptions,
 ): NextConfig;
 
+export declare function defineLiteralI18nConfig(
+  options?: LiteralI18nPluginOptions,
+): LiteralI18nPluginOptions;
+
 export declare const withSourceI18n: typeof withLiteralI18n;
 export declare const SourceI18nNextPlugin: typeof LiteralI18nNextPlugin;
 

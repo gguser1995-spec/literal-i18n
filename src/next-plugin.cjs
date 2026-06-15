@@ -109,8 +109,13 @@ function withLiteralI18n(nextConfig = {}, options = {}) {
   };
 }
 
+function defineLiteralI18nConfig(options = {}) {
+  return options;
+}
+
 module.exports = withLiteralI18n;
 module.exports.LiteralI18nNextPlugin = LiteralI18nNextPlugin;
 module.exports.withLiteralI18n = withLiteralI18n;
+module.exports.defineLiteralI18nConfig = defineLiteralI18nConfig;
 module.exports.SourceI18nNextPlugin = LiteralI18nNextPlugin;
 module.exports.withSourceI18n = withLiteralI18n;
