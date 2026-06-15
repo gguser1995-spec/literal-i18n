@@ -12,13 +12,13 @@
   ],
   "license": "MIT",
   "author": "lwfux",
-  "homepage": "https://gitee.com/lwfux/literal-i18n",
+  "homepage": "https://github.com/gguser1995-spec/literal-i18n",
   "repository": {
     "type": "git",
-    "url": "git+https://gitee.com/lwfux/literal-i18n.git"
+    "url": "git+https://github.com/gguser1995-spec/literal-i18n.git"
   },
   "bugs": {
-    "url": "https://gitee.com/lwfux/literal-i18n/issues"
+    "url": "https://github.com/gguser1995-spec/literal-i18n/issues"
   },
   "type": "module",
   "sideEffects": false,
