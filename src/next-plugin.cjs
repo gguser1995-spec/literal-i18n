@@ -1,6 +1,9 @@
+const { watch } = require('node:fs');
+const path = require('node:path');
 const { LiteralI18nExtractor } = require('./extract-core.cjs');
 
 const PLUGIN_NAME = 'LiteralI18nNextPlugin';
+const devWatcherByCwd = new Map();
 
 function getInstalledNextMajor(cwd) {
   try {
@@ -10,6 +13,88 @@ function getInstalledNextMajor(cwd) {
     return Number.isFinite(major) ? major : undefined;
   } catch {
     return undefined;
+  }
+}
+
+function isNextDevCommand() {
+  return process.env.NODE_ENV !== 'production' && process.argv.some((arg) => arg === 'dev');
+}
+
+function isWebpackCommand() {
+  return process.argv.some((arg) => arg === '--webpack' || arg === 'webpack');
+}
+
+function startDevExtractorWatch(options = {}) {
+  const cwd = options.cwd || process.cwd();
+  if (devWatcherByCwd.has(cwd)) return;
+
+  const extractor = new LiteralI18nExtractor({ ...options, cwd });
+  let running = Promise.resolve();
+  let timer;
+  let pendingFiles = new Set();
+  let pendingFullScan = false;
+  const watchers = [];
+
+  const enqueue = (task) => {
+    running = running.then(task, task);
+    return running;
+  };
+  const flush = async () => {
+    const files = Array.from(pendingFiles);
+    const shouldFullScan = pendingFullScan;
+    pendingFiles = new Set();
+    pendingFullScan = false;
+
+    await enqueue(async () => {
+      if (shouldFullScan) {
+        await extractor.fullScan('dev-watch');
+        return;
+      }
+      await extractor.scanChanged({ reason: 'dev-watch', modifiedFiles: files });
+    }).catch((error) => {
+      console.error(error instanceof Error ? error.stack || error.message : String(error));
+    });
+  };
+  const schedule = (files) => {
+    if (!files) {
+      pendingFullScan = true;
+    } else {
+      for (const file of files) pendingFiles.add(file);
+    }
+    clearTimeout(timer);
+    timer = setTimeout(flush, 120);
+  };
+
+  enqueue(() => extractor.fullScan('dev-start')).catch((error) => {
+    console.error(error instanceof Error ? error.stack || error.message : String(error));
+  });
+
+  for (const sourceDir of extractor.getWatchDirs()) {
+    try {
+      watchers.push(
+        watch(sourceDir, { recursive: true }, (_eventType, fileName) => {
+          const changedFile = fileName ? path.join(sourceDir, fileName.toString()) : undefined;
+          schedule(changedFile ? [changedFile] : undefined);
+        }),
+      );
+    } catch (error) {
+      console.warn(
+        `[literal-i18n] dev watch unavailable for ${sourceDir}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+
+  devWatcherByCwd.set(cwd, {
+    close() {
+      clearTimeout(timer);
+      for (const watcher of watchers) watcher.close();
+    },
+  });
+
+  if (!options.silent) {
+    console.log('[literal-i18n] dev watcher started for Turbopack mode.');
   }
 }
 
@@ -86,9 +171,17 @@ function withLiteralI18n(nextConfig = {}, options = {}) {
   const outputConfig = { ...nextConfig };
   const nextMajor = getInstalledNextMajor(options.cwd || process.cwd());
   let pluginAdded = false;
+  const shouldStartDevWatch =
+    options.devWatch !== false &&
+    isNextDevCommand() &&
+    !isWebpackCommand();
 
   if (nextMajor && nextMajor >= 16 && outputConfig.turbopack === undefined) {
     outputConfig.turbopack = {};
+  }
+
+  if (shouldStartDevWatch) {
+    startDevExtractorWatch(options);
   }
 
   return {

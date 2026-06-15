@@ -75,13 +75,17 @@ CLI 会默认读取项目根目录下的 `literal-i18n.config.mjs`、`.js`、`.c
 这段 `i18n:extract` 不是所有项目都必须配置：
 
 - 使用 `withLiteralI18n` 且走 webpack 编译时，Next 插件会在 dev/watch/build 阶段自动抽取。
-- 使用 Next.js 16 / Turbopack 时，建议配置 `i18n:extract`，并在 `build` 前先执行它。
+- 使用 Next.js 16 / Turbopack dev 时，`withLiteralI18n` 会自动启动一个内置 dev watcher，不需要 `--webpack`。
+- 使用 Next.js 16 / Turbopack build 时，建议配置 `i18n:extract`，并在 `build` 前先执行它。
 - 不使用 Next 插件，或在非 Next 项目里使用时，需要通过 CLI 手动抽取。
 
-Turbopack 开发模式下，建议单独开一个终端运行：
+如果你不想让 Next 插件启动内置 watcher，可以关闭它：
 
-```bash
-npm run i18n:watch
+```ts
+export default withLiteralI18n(nextConfig, {
+  ...literalI18nConfig,
+  devWatch: false,
+});
 ```
 
 ## 配置 next.config.ts
@@ -117,9 +121,15 @@ export default withOtherPlugin(
 
 `withLiteralI18n` 会在检测到宿主项目使用 Next.js 16 且没有配置 `turbopack` 时，自动补一个空的 `turbopack: {}`，避免 Next.js 因为同时看到 webpack config 和 Turbopack build 而报错。
 
-需要注意：当前 Next 插件的自动 watch/build 抽取依赖 webpack hook。Turbopack 模式下 webpack hook 可能不会参与编译流程。如果你使用 Turbopack，推荐在脚本里显式运行 CLI。
+Turbopack dev 模式下，webpack hook 不会执行，所以 `withLiteralI18n` 会自动启动一个独立 dev watcher，负责初次扫描和源码变化后的增量抽取。
 
-如果你希望继续使用 Next 插件在构建阶段自动抽取，可以使用 webpack 构建：
+Turbopack build 模式下，仍然建议在 `next build` 前显式运行 CLI：
+
+```bash
+npm run i18n:extract && next build
+```
+
+如果你希望继续使用 webpack hook 在构建阶段自动抽取，可以使用 webpack 构建：
 
 ```bash
 next build --webpack
@@ -164,7 +174,7 @@ literal-i18n-extract src \
 literal-i18n-extract --watch
 ```
 
-`--watch` 适合 Turbopack 开发模式。webpack 模式下，`withLiteralI18n` 已经会通过 webpack hook 监听源码变化。
+`--watch` 适合你没有使用 Next 插件，或主动设置了 `devWatch: false` 的场景。默认情况下，Turbopack dev 会由 `withLiteralI18n` 自动启动内置 watcher。
 
 ## 配置 I18nProvider
 

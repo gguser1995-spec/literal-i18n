@@ -21,6 +21,7 @@ export interface LiteralI18nPluginOptions extends MessageIdOptions {
   treatSourceAsMissing?: boolean;
   progress?: boolean;
   silent?: boolean;
+  devWatch?: boolean;
   translateHook?: TranslateTextHook;
   translateJsonHook?: TranslateJsonHook;
   localeOutput?: (locale: string) => string;
