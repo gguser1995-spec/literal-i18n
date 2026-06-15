@@ -1,6 +1,6 @@
 # Literal I18n
 
-[中文](./README.md) | [English](./README.en.md)
+[中文](https://gitee.com/lwfux/literal-i18n/blob/master/README.md) | [English](https://gitee.com/lwfux/literal-i18n/blob/master/README.en.md)
 
 Literal I18n is a React / Next.js i18n library that uses literal source text as the translation source.
 

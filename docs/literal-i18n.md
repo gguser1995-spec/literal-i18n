@@ -1,6 +1,6 @@
 # Literal I18n
 
-[中文](./literal-i18n.md) | [English](./literal-i18n.en.md)
+[中文](https://gitee.com/lwfux/literal-i18n/blob/master/docs/literal-i18n.md) | [English](https://gitee.com/lwfux/literal-i18n/blob/master/docs/literal-i18n.en.md)
 
 Literal I18n 是一个“直接用原文作为翻译源”的 React / Next.js 国际化工具。
 
