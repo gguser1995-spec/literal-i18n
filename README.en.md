@@ -692,6 +692,12 @@ Common options:
 
 ---
 
+## 📝 Changelog
+
+See [CHANGELOG.md](CHANGELOG.md)
+
+---
+
 ## ❓ Need Help?
 
 If you encounter a bug, have a feature request, or have questions about configuration or usage, please open an issue on GitHub:
