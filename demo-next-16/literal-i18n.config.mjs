@@ -33,9 +33,9 @@ const translateJsonHook = apiKey
 
 export default defineLiteralI18nConfig({
   sourceDir: 'src',
-  sourceOutput: 'messages/en.json',
-  sourceMapOutput: 'messages/source-map.json',
-  localeDir: 'messages',
+  sourceOutput: 'src/messages/en.json',
+  sourceMapOutput: 'src/messages/source-map.json',
+  localeDir: 'src/messages',
   locales: ['en', 'zh'],
   sourceLocale: 'en',
   keyMode: 'hash',

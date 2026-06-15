@@ -59,6 +59,9 @@ npm run dev
 
 > ⚠️ The demo uses DeepSeek API for translation. **Use your own API Key**, not the placeholder in `.env`.
 
+> 💡 **Dev experience**: Next.js 15 demo uses webpack HMR — changes are **reflected instantly**.
+> Next.js 16 demo uses Turbopack — **manually refresh the page** to see changes.
+
 Create a shared config file first. Both the Next plugin and the CLI can use it:
 
 ```js

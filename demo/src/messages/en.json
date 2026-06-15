@@ -1,0 +1,8 @@
+{
+  "Hello {name}": "Hello {name}",
+  "Items count: {count}": "Items count: {count}",
+  "Language": "Language",
+  "Hello World": "Hello World",
+  "Welcome to Literal I18n Demo": "Welcome to Literal I18n Demo",
+  "This is a server component": "This is a server component"
+}

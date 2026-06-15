@@ -11,7 +11,6 @@ export default async function HomePage() {
       <h1><T text="Hello World" /></h1>
       <p><T text="Welcome to Literal I18n Demo" /></p>
       <hr />
-
       <section>
         <h2><T text="This is a server component" /></h2>
       </section>

@@ -1,0 +1,8 @@
+{
+  "Hello World": "你好，世界",
+  "Welcome to Literal I18n Demo": "欢迎使用 Literal I18n 演示",
+  "Hello {name}": "你好 {name}",
+  "This is a server component": "这是一个服务器组件",
+  "Items count: {count}": "项目数量：{count}",
+  "Language": "语言"
+}

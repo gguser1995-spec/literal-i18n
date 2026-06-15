@@ -8,7 +8,7 @@ export default async function HomePage() {
       <p><T text="Welcome to Literal I18n Demo" /></p>
     <T text="This is a static text"/>
       <hr />
-
+    <T text="This is a new area" />
       <section>
         <h2><T text="This is a server component" /></h2>
       </section>

@@ -59,6 +59,9 @@ npm run dev
 
 > ⚠️ Demo 的翻译功能依赖 DeepSeek API，请使用 **你自己申请的 API Key**，不要使用示例中的占位 key。
 
+> 💡 **开发体验差异**：Next.js 15 demo 使用 webpack HMR，修改代码后页面**即时刷新**；
+> Next.js 16 demo 使用 Turbopack，修改后需要**手动刷新页面**才能看到效果。
+
 建议先建一个独立配置文件，让 Next 插件和 CLI 共用同一份配置：
 
 ```js
