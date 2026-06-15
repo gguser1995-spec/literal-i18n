@@ -9,8 +9,8 @@ export interface TranslateTextHookInput {
 export interface TranslateJsonHookInput {
   locale: string;
   sourceLocale: string;
-  sourceMessages: Record<string, string>;
-  existingMessages: Record<string, unknown>;
+  sourceMessages?: Record<string, string>;
+  existingMessages?: Record<string, unknown>;
   missingTexts: string[];
 }
 

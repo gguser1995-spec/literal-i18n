@@ -2,6 +2,17 @@ const { LiteralI18nExtractor } = require('./extract-core.cjs');
 
 const PLUGIN_NAME = 'LiteralI18nNextPlugin';
 
+function getInstalledNextMajor(cwd) {
+  try {
+    const packageJsonPath = require.resolve('next/package.json', { paths: [cwd] });
+    const packageJson = require(packageJsonPath);
+    const major = Number(String(packageJson.version || '').split('.')[0]);
+    return Number.isFinite(major) ? major : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 class LiteralI18nNextPlugin {
   constructor(options = {}) {
     this.options = options;
@@ -72,10 +83,16 @@ class LiteralI18nNextPlugin {
 
 function withLiteralI18n(nextConfig = {}, options = {}) {
   const userWebpack = nextConfig.webpack;
+  const outputConfig = { ...nextConfig };
+  const nextMajor = getInstalledNextMajor(options.cwd || process.cwd());
   let pluginAdded = false;
 
+  if (nextMajor && nextMajor >= 16 && outputConfig.turbopack === undefined) {
+    outputConfig.turbopack = {};
+  }
+
   return {
-    ...nextConfig,
+    ...outputConfig,
     webpack(config, context) {
       config.plugins = config.plugins || [];
       if (!pluginAdded) {

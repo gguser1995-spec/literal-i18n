@@ -1,6 +1,5 @@
 import path from 'node:path';
 import { readFile } from 'node:fs/promises';
-import { headers } from 'next/headers';
 import { createTranslator, type TranslateHook, type TranslationMessages } from './translator';
 import { getEnvMessageIdOptions, type MessageIdOptions } from './id';
 
@@ -24,13 +23,29 @@ export async function loadMessages(
   }
 }
 
+async function getRequestLocaleFromHeaders(): Promise<string | undefined> {
+  try {
+    const importNextHeaders = new Function('specifier', 'return import(specifier)') as (
+      specifier: string,
+    ) => Promise<{ headers?: () => Promise<{ get(name: string): string | null }> | { get(name: string): string | null } }>;
+    const nextHeaders = await importNextHeaders('next/headers');
+    const getHeaders = nextHeaders.headers as
+      | undefined
+      | (() => Promise<{ get(name: string): string | null }> | { get(name: string): string | null });
+    const headerStore = await getHeaders?.();
+    return headerStore?.get(NEXT_INTL_LOCALE_HEADER) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function getTranslator(
   input?: {
     locale?: string;
     messages?: TranslationMessages | null;
   } & MessageIdOptions,
 ): Promise<LocaleTranslator> {
-  const locale = input?.locale ?? (await headers()).get(NEXT_INTL_LOCALE_HEADER) ?? 'en';
+  const locale = input?.locale ?? (await getRequestLocaleFromHeaders()) ?? 'en';
   const messages = input?.messages ?? await loadMessages(locale);
 
   return {

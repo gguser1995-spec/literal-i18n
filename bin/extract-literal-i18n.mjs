@@ -2,18 +2,14 @@
 
 import { createRequire } from 'node:module';
 import { existsSync, readFileSync } from 'node:fs';
-import nextEnv from '@next/env';
+import path from 'node:path';
 
-const { loadEnvConfig } = nextEnv;
-loadEnvConfig(process.cwd(), true, console, true);
-loadLiteralI18nDevelopmentEnv();
+loadLiteralI18nEnv();
 const require = createRequire(import.meta.url);
 const { LiteralI18nExtractor } = require('../src/extract-core.cjs');
 
-function loadLiteralI18nDevelopmentEnv() {
-  const envPath = '.env.development';
+function loadEnvFile(envPath) {
   if (!existsSync(envPath)) return;
-
   const allowedKeys = /^(LITERAL_I18N_|NEXT_PUBLIC_LITERAL_I18N_|NEXT_PUBLIC_LOCALES$|DEEPSEEK_)/;
   for (const line of readFileSync(envPath, 'utf8').split(/\r?\n/)) {
     const trimmedLine = line.trim();
@@ -23,6 +19,21 @@ function loadLiteralI18nDevelopmentEnv() {
     if (!match || !allowedKeys.test(match[1])) continue;
 
     process.env[match[1]] = match[2].replace(/^(['"])(.*)\1$/, '$2');
+  }
+}
+
+function loadLiteralI18nEnv() {
+  const cwd = process.cwd();
+  const mode = process.env.NODE_ENV || 'development';
+  const envFiles = [
+    '.env',
+    '.env.local',
+    `.env.${mode}`,
+    `.env.${mode}.local`,
+  ];
+
+  for (const envFile of envFiles) {
+    loadEnvFile(path.join(cwd, envFile));
   }
 }
 

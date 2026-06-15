@@ -46,6 +46,25 @@ import { T } from 'literal-i18n';
 
 翻译后的文案可以调整占位符位置，只要保留 `{name}` 即可。
 
+在 Next.js App Router 中，如果你给 `<T />` 传 ReactNode 插值，例如 `<span />`，建议把这段使用放在 client component 里：
+
+```tsx
+'use client';
+
+import { T } from 'literal-i18n';
+
+export function NameLine() {
+  return (
+    <T
+      text="my name is {name}"
+      name={<span className="text-red-500">Tom</span>}
+    />
+  );
+}
+```
+
+Server Component 中建议只传字符串、数字这类普通参数。ReactNode 从 Server Component 传给 Client Component prop 时，容易遇到 Next.js 序列化和 hydration 边界问题。
+
 ## 客户端组件函数
 
 如果你需要在 client component 里得到字符串，而不是直接渲染 `<T />`，使用 `useTranslate()`：
@@ -169,6 +188,27 @@ export default withLiteralI18n(nextConfig, {
 export default withOtherPlugin(
   withLiteralI18n(nextConfig, literalI18nOptions),
 );
+```
+
+### Next.js 16 和 Turbopack
+
+`withLiteralI18n` 会在检测到宿主项目使用 Next.js 16 且没有配置 `turbopack` 时，自动补一个空的 `turbopack: {}`，避免 Next.js 因为同时看到 webpack config 和 Turbopack build 而报错。
+
+需要注意：当前 Next 插件的自动 watch/build 抽取依赖 webpack hook。Turbopack 模式下 webpack hook 可能不会参与编译流程。如果你使用 Turbopack，推荐在脚本里显式运行 CLI：
+
+```json
+{
+  "scripts": {
+    "i18n:extract": "literal-i18n-extract src --out src/messages/en.json --source-map-out src/messages/source-map.json",
+    "build": "npm run i18n:extract && next build"
+  }
+}
+```
+
+如果你希望继续使用 Next 插件在构建阶段自动抽取，可以使用 webpack 构建：
+
+```bash
+next build --webpack
 ```
 
 ## 配置语言和输出目录
@@ -325,7 +365,7 @@ withLiteralI18n(nextConfig, {
 ```ts
 import { createOpenAICompatibleTranslateJsonHook } from 'literal-i18n/local-translate-api';
 
-createOpenAICompatibleTranslateJsonHook({
+const translateJsonHook = createOpenAICompatibleTranslateJsonHook({
   baseUrl: process.env.TRANSLATE_API_BASE_URL!,
   apiKey: process.env.TRANSLATE_API_KEY!,
   model: process.env.TRANSLATE_MODEL!,
@@ -333,10 +373,26 @@ createOpenAICompatibleTranslateJsonHook({
 });
 ```
 
+如果你需要包装 helper，请把 input 原样传入：
+
+```ts
+const deepseekHook = createOpenAICompatibleTranslateJsonHook({
+  baseUrl: process.env.TRANSLATE_API_BASE_URL!,
+  apiKey: process.env.TRANSLATE_API_KEY!,
+  model: process.env.TRANSLATE_MODEL!,
+});
+
+withLiteralI18n(nextConfig, {
+  async translateJsonHook(input) {
+    return deepseekHook(input);
+  },
+});
+```
+
 ```ts
 import { createLocalTranslateJsonHook } from 'literal-i18n/local-translate-api';
 
-createLocalTranslateJsonHook({
+const translateJsonHook = createLocalTranslateJsonHook({
   endpoint: process.env.TRANSLATE_API_ENDPOINT!,
   prompt: 'Translate concise UI copy.',
 });
