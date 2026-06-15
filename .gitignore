@@ -6,6 +6,9 @@ demo/src/messages
 .next
 /.env*
 .env.local
+.env.example
+demo/.env
+demo-next-16/.env
 npm-debug.log*
 pnpm-debug.log*
 yarn-debug.log*
