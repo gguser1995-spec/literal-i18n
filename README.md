@@ -53,7 +53,21 @@ export default defineLiteralI18nConfig({
   idPrefix: 'm_',
   idLength: 16,
   async translateJsonHook(input) {
+    // translateMissingTexts 可自行实现；
     return await translateMissingTexts(input);
+    // 另外包内提供可选，例子：
+    // const apiKey = process.env.LITERAL_I18N_API_KEY;
+    // if (!apiKey) return {};
+    // const hook = createDeepSeekTranslateJsonHook({
+    //   baseUrl: 'https://api.deepseek.com',
+    //   apiKey,
+    //   model: 'deepseek-v4-flash',
+    //   batchSize: 20,
+    //   timeoutMs: 120000,
+    //   temperature: 0.1,
+    //   prompt: '你是一位专业的网站 UI 本地化翻译人员。保持译文简洁自然。保留所有占位符不变。',
+    // });
+    // return hook(input);
   },
 });
 ```
@@ -472,7 +486,9 @@ withLiteralI18n(nextConfig, {
 
 ## 可选翻译 Helper
 
-包里提供了几个 helper，方便快速接入已有服务。它们只是可选方案，不是必须使用。
+包里提供了几个 helper，方便快速接入已有服务。它们只是可选方案，不是必须使用，可自行编写。
+
+> **⚠️ 说明**: `createOpenAICompatibleTranslateJsonHook` 已导出但尚未经过充分测试。目前推荐使用 `createDeepSeekTranslateJsonHook`（底层同样是 OpenAI-compatible 调用，已验证可用）。
 
 ```ts
 import { createOpenAICompatibleTranslateJsonHook } from 'literal-i18n/local-translate-api';
@@ -511,6 +527,8 @@ const translateJsonHook = createLocalTranslateJsonHook({
 ```
 
 文档不假设你使用某个具体本地服务或某个具体模型。你可以接 DeepSeek、OpenAI-compatible API、自建服务，或者完全自己实现。
+
+> **💡 推荐**: 使用 DeepSeek 时，建议将 model 设为 `deepseek-v4-flash`，兼顾翻译质量和响应速度。`deepseek-chat` 在大量短文本翻译场景下可能不如 `deepseek-v4-flash` 高效。
 
 ## Hash Key 模式
 
