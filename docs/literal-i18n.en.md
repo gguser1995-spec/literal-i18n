@@ -689,3 +689,13 @@ Common options:
 - `createLocalTranslateJsonHook(options)`
 - `createOpenAICompatibleTranslateJsonHook(options)`
 - `createDeepSeekTranslateJsonHook(options)`
+
+---
+
+## ❓ Need Help?
+
+If you encounter a bug, have a feature request, or have questions about configuration or usage, please open an issue on GitHub:
+
+**👉 https://github.com/gguser1995-spec/literal-i18n/issues**
+
+Pull Requests are also welcome.
