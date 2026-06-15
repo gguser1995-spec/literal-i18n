@@ -11,12 +11,33 @@ export interface LocaleTranslator {
   tr: TranslateHook;
 }
 
+export interface ServerTranslatorOptions extends MessageIdOptions {
+  localeDir?: string;
+  sourceMap?: TranslationMessages | null;
+}
+
+export interface GetTranslatorInput extends ServerTranslatorOptions {
+  locale?: string;
+  messages?: TranslationMessages | null;
+}
+
 export async function loadMessages(
   locale: string,
   localeDir = path.join(process.cwd(), 'src/messages'),
 ): Promise<TranslationMessages> {
   try {
     const content = await readFile(path.join(localeDir, `${locale}.json`), 'utf8');
+    return JSON.parse(content) as TranslationMessages;
+  } catch {
+    return {};
+  }
+}
+
+export async function loadSourceMap(
+  localeDir = path.join(process.cwd(), 'src/messages'),
+): Promise<TranslationMessages> {
+  try {
+    const content = await readFile(path.join(localeDir, 'source-map.json'), 'utf8');
     return JSON.parse(content) as TranslationMessages;
   } catch {
     return {};
@@ -40,13 +61,12 @@ async function getRequestLocaleFromHeaders(): Promise<string | undefined> {
 }
 
 export async function getTranslator(
-  input?: {
-    locale?: string;
-    messages?: TranslationMessages | null;
-  } & MessageIdOptions,
+  input?: GetTranslatorInput,
 ): Promise<LocaleTranslator> {
   const locale = input?.locale ?? (await getRequestLocaleFromHeaders()) ?? 'en';
-  const messages = input?.messages ?? await loadMessages(locale);
+  const localeDir = input?.localeDir;
+  const messages = input?.messages ?? await loadMessages(locale, localeDir);
+  const sourceMap = input?.sourceMap ?? await loadSourceMap(localeDir);
 
   return {
     locale,
@@ -56,15 +76,17 @@ export async function getTranslator(
       ...input,
       locale,
       messages,
+      sourceMap,
     }),
   };
 }
 
 export async function getLocaleTranslator(
   locale: string,
-  options: MessageIdOptions = {},
+  options: ServerTranslatorOptions = {},
 ): Promise<LocaleTranslator> {
-  const messages = await loadMessages(locale);
+  const messages = await loadMessages(locale, options.localeDir);
+  const sourceMap = options.sourceMap ?? await loadSourceMap(options.localeDir);
 
   return {
     locale,
@@ -74,6 +96,7 @@ export async function getLocaleTranslator(
       ...options,
       locale,
       messages,
+      sourceMap,
     }),
   };
 }

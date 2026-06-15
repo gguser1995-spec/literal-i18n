@@ -15,6 +15,7 @@ export interface TranslateHook {
 export interface CreateTranslatorOptions extends MessageIdOptions {
   locale?: string;
   messages?: TranslationMessages | null;
+  sourceMap?: TranslationMessages | null;
   onMissing?: (text: string, locale?: string, id?: string) => void;
 }
 
@@ -26,20 +27,24 @@ function normalizeTranslateOptions(options?: string | TranslateOptions): Transla
 function lookupMessage(
   messages: TranslationMessages | null | undefined,
   text: string,
-  options: MessageIdOptions & { id?: string },
+  options: MessageIdOptions & { id?: string; sourceMap?: TranslationMessages | null },
 ): string | undefined {
-  const value = messages?.[getMessageKey(text, options)];
+  const directKey = getMessageKey(text, options);
+  const sourceMapKey = options.id ? `${text}_${options.id}` : text;
+  const mappedKey = options.sourceMap?.[sourceMapKey];
+  const value = messages?.[directKey] ??
+    (typeof mappedKey === 'string' ? messages?.[mappedKey] : undefined);
   return typeof value === 'string' ? value : undefined;
 }
 
 export const defaultTranslate: TranslateHook = (text, params) => formatMessage(text, params);
 
 export function createTranslator(options: CreateTranslatorOptions = {}): TranslateHook {
-  const { locale, messages, onMissing } = options;
+  const { locale, messages, sourceMap, onMissing } = options;
 
   return (text, params, callOptions) => {
     const { locale: overrideLocale, id } = normalizeTranslateOptions(callOptions);
-    const translated = lookupMessage(messages, text, { ...options, id });
+    const translated = lookupMessage(messages, text, { ...options, sourceMap, id });
 
     if (translated === undefined) {
       onMissing?.(text, overrideLocale ?? locale, id);
