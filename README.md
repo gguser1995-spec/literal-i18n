@@ -91,6 +91,7 @@ CLI 会默认读取项目根目录下的 `literal-i18n.config.mjs`、`.js`、`.c
 这段 `i18n:extract` 不是所有项目都必须配置：
 
 - 使用 `withLiteralI18n` 且走 webpack 编译时，Next 插件会在 dev/watch/build 阶段自动抽取。
+- 使用 Next.js 15 默认 dev 时，只走 webpack watch，不会额外启动内置 watcher。
 - 使用 Next.js 16 / Turbopack dev 时，`withLiteralI18n` 会自动启动一个内置 dev watcher，不需要 `--webpack`。
 - 使用 Next.js 16 / Turbopack build 时，建议配置 `i18n:extract`，并在 `build` 前先执行它。
 - 不使用 Next 插件，或在非 Next 项目里使用时，需要通过 CLI 手动抽取。
@@ -137,7 +138,9 @@ export default withOtherPlugin(
 
 `withLiteralI18n` 会在检测到宿主项目使用 Next.js 16 且没有配置 `turbopack` 时，自动补一个空的 `turbopack: {}`，避免 Next.js 因为同时看到 webpack config 和 Turbopack build 而报错。
 
-Turbopack dev 模式下，webpack hook 不会执行，所以 `withLiteralI18n` 会自动启动一个独立 dev watcher，负责初次扫描和源码变化后的增量抽取。
+Next.js 15 默认使用 webpack dev，`withLiteralI18n` 只使用 webpack watch hook 抽取，不会启动内置 dev watcher。
+
+Next.js 16 默认偏向 Turbopack dev，webpack hook 可能不会执行，所以 `withLiteralI18n` 会自动启动一个独立 dev watcher，负责初次扫描和源码变化后的增量抽取。如果显式使用 `next dev --webpack`，内置 dev watcher 会关闭，改由 webpack hook 抽取。
 
 Turbopack build 模式下，仍然建议在 `next build` 前显式运行 CLI：
 

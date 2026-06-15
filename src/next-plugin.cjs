@@ -100,7 +100,9 @@ function startDevExtractorWatch(options = {}) {
 
 class LiteralI18nNextPlugin {
   constructor(options = {}) {
-    this.options = options;
+    const { skipWebpackWatchExtraction = false, ...extractorOptions } = options;
+    this.options = extractorOptions;
+    this.skipWebpackWatchExtraction = skipWebpackWatchExtraction;
     this.extractorByCwd = new Map();
     this.hasInitialWatchScan = false;
     this.running = Promise.resolve();
@@ -136,6 +138,8 @@ class LiteralI18nNextPlugin {
     });
 
     compiler.hooks.watchRun.tapPromise(PLUGIN_NAME, async (watchCompiler) => {
+      if (this.skipWebpackWatchExtraction) return;
+
       const modifiedFiles = Array.from(watchCompiler.modifiedFiles || []);
       const removedFiles = Array.from(watchCompiler.removedFiles || []);
       const modifiedSourceFiles = extractor.filterSourceFiles(modifiedFiles);
@@ -166,15 +170,19 @@ class LiteralI18nNextPlugin {
   }
 }
 
+function shouldStartInternalDevWatch({ options, nextMajor }) {
+  if (!isNextDevCommand() || isWebpackCommand()) return false;
+  if (options.devWatch === true) return true;
+  if (options.devWatch === false) return false;
+  return Boolean(nextMajor && nextMajor >= 16);
+}
+
 function withLiteralI18n(nextConfig = {}, options = {}) {
   const userWebpack = nextConfig.webpack;
   const outputConfig = { ...nextConfig };
   const nextMajor = getInstalledNextMajor(options.cwd || process.cwd());
   let pluginAdded = false;
-  const shouldStartDevWatch =
-    options.devWatch !== false &&
-    isNextDevCommand() &&
-    !isWebpackCommand();
+  const shouldStartDevWatch = shouldStartInternalDevWatch({ options, nextMajor });
 
   if (nextMajor && nextMajor >= 16 && outputConfig.turbopack === undefined) {
     outputConfig.turbopack = {};
@@ -189,7 +197,11 @@ function withLiteralI18n(nextConfig = {}, options = {}) {
     webpack(config, context) {
       config.plugins = config.plugins || [];
       if (!pluginAdded) {
-        config.plugins.push(new LiteralI18nNextPlugin({ ...options, cwd: context.dir }));
+        config.plugins.push(new LiteralI18nNextPlugin({
+          ...options,
+          cwd: context.dir,
+          skipWebpackWatchExtraction: shouldStartDevWatch,
+        }));
         pluginAdded = true;
       }
 

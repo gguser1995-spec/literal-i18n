@@ -77,6 +77,7 @@ For Next.js 16 or Turbopack builds, prepare an explicit extract script:
 `i18n:extract` is not required in every project:
 
 - With `withLiteralI18n` and webpack, the Next plugin extracts during dev/watch/build.
+- With default Next.js 15 dev, only the webpack watcher runs; the internal watcher is not started.
 - With Next.js 16 / Turbopack dev, `withLiteralI18n` starts an internal dev watcher automatically.
 - With Next.js 16 / Turbopack build, run `i18n:extract` before `next build`.
 - Without the Next plugin, or outside Next.js, use the CLI manually.
@@ -114,7 +115,9 @@ export default withOtherPlugin(
 
 When `withLiteralI18n` detects Next.js 16 and no `turbopack` config, it adds an empty `turbopack: {}` to avoid the "webpack config without turbopack config" error.
 
-In Turbopack dev mode, webpack hooks are not executed, so `withLiteralI18n` starts an independent dev watcher for initial extraction and incremental updates.
+Default Next.js 15 dev uses webpack, so `withLiteralI18n` only uses the webpack watch hook and does not start the internal dev watcher.
+
+Default Next.js 16 dev leans toward Turbopack, where webpack hooks may not run. In that mode, `withLiteralI18n` starts an independent dev watcher for initial extraction and incremental updates. If you explicitly run `next dev --webpack`, the internal watcher is disabled and extraction is handled by the webpack hook.
 
 For Turbopack build, still run the CLI before `next build`:
 
