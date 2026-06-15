@@ -2,6 +2,7 @@ node_modules
 dist
 /messages
 /src/messages
+demo/src/messages
 .next
 /.env*
 .env.local
