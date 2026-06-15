@@ -327,6 +327,22 @@ const { tr } = await getLocaleTranslator(locale);
 tr('Hello {name}', { name: user.name });
 ```
 
+`getLocaleTranslator(locale)` reads `src/messages/{locale}.json` and `src/messages/source-map.json` by default. In hash mode, you can still call `tr` with source text directly; you do not need to pass `keyMode`, `idPrefix`, or `idLength` again:
+
+```ts
+const { tr } = await getLocaleTranslator('zh');
+
+tr('Server rendered text');
+```
+
+If your message directory is not `src/messages`, pass `localeDir`:
+
+```ts
+const { tr } = await getLocaleTranslator(locale, {
+  localeDir: 'app/messages',
+});
+```
+
 To infer locale from the Next request header:
 
 ```ts
@@ -336,6 +352,8 @@ const { tr } = await getTranslator();
 
 tr('Server rendered text');
 ```
+
+`getTranslator()` also loads `source-map.json` automatically so source text can resolve to hash keys.
 
 ## Non-Component Usage
 
@@ -608,6 +626,8 @@ With `id`, source-map keys look like `source_id`:
 
 Source mode usually does not need `sourceMapOutput`, because the key is already the source text.
 
+Server helpers also use `source-map.json` as a runtime lookup aid. For example, `getLocaleTranslator(locale)` first tries the direct key; if that misses, it uses source-map to resolve source text to the hash key, then reads the translated value from the current locale JSON.
+
 ## API Reference
 
 ### `literal-i18n`
@@ -625,8 +645,15 @@ Source mode usually does not need `sourceMapOutput`, because the key is already 
 ### `literal-i18n/server`
 
 - `loadMessages(locale, localeDir?)`
+- `loadSourceMap(localeDir?)`
 - `getTranslator(input?)`
 - `getLocaleTranslator(locale, options?)`
+
+Common `getTranslator` / `getLocaleTranslator` options:
+
+- `localeDir`: message directory, default `src/messages`
+- `sourceMap`: pass a source-map manually; when omitted, `${localeDir}/source-map.json` is loaded automatically
+- `keyMode` / `idPrefix` / `idLength`: optional. In hash mode, you usually do not need to pass them because server helpers resolve through source-map.
 
 ### `literal-i18n/next`
 
