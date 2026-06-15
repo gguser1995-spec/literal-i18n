@@ -40,7 +40,9 @@ npm install literal-i18n
 
 ```js
 // literal-i18n.config.mjs
-export default {
+import { defineLiteralI18nConfig } from 'literal-i18n/next';
+
+export default defineLiteralI18nConfig({
   sourceDir: 'src',
   sourceOutput: 'src/messages/en.json',
   sourceMapOutput: 'src/messages/source-map.json',
@@ -53,7 +55,7 @@ export default {
   async translateJsonHook(input) {
     return await translateMissingTexts(input);
   },
-};
+});
 ```
 
 CLI 会默认读取项目根目录下的 `literal-i18n.config.mjs`、`.js`、`.cjs`、`.ts` 或 `.json`。
