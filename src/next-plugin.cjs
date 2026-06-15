@@ -1,9 +1,11 @@
-const { watch } = require('node:fs');
+const fs = require('node:fs');
 const path = require('node:path');
 const { LiteralI18nExtractor } = require('./extract-core.cjs');
 
 const PLUGIN_NAME = 'LiteralI18nNextPlugin';
 const devWatcherByCwd = new Map();
+const WATCH_EXTENSIONS = new Set(['.js', '.jsx', '.ts', '.tsx']);
+const DEV_WATCH_POLL_INTERVAL_MS = 800;
 
 function getInstalledNextMajor(cwd) {
   try {
@@ -24,6 +26,83 @@ function isWebpackCommand() {
   return process.argv.some((arg) => arg === '--webpack' || arg === 'webpack');
 }
 
+function collectWatchFiles(targetPath) {
+  if (!targetPath) return [];
+  let stat;
+  try {
+    stat = fs.statSync(targetPath);
+  } catch {
+    return [];
+  }
+
+  if (stat.isFile()) {
+    return WATCH_EXTENSIONS.has(path.extname(targetPath)) ? [path.resolve(targetPath)] : [];
+  }
+
+  if (!stat.isDirectory()) return [];
+
+  const files = [];
+  let entries = [];
+  try {
+    entries = fs.readdirSync(targetPath, { withFileTypes: true });
+  } catch {
+    return files;
+  }
+
+  for (const entry of entries) {
+    if (entry.name === 'node_modules' || entry.name === '.next') continue;
+
+    const entryPath = path.join(targetPath, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...collectWatchFiles(entryPath));
+      continue;
+    }
+
+    if (entry.isFile() && WATCH_EXTENSIONS.has(path.extname(entryPath))) {
+      files.push(path.resolve(entryPath));
+    }
+  }
+
+  return files;
+}
+
+function createWatchSnapshot(extractor) {
+  const files = extractor.filterSourceFiles(
+    extractor.getWatchDirs().flatMap((sourceDir) => collectWatchFiles(sourceDir)),
+  );
+  const snapshot = new Map();
+
+  for (const file of files) {
+    try {
+      const stat = fs.statSync(file);
+      snapshot.set(file, `${stat.mtimeMs}:${stat.size}`);
+    } catch {
+      // Ignore files that disappear between directory listing and stat.
+    }
+  }
+
+  return snapshot;
+}
+
+function diffWatchSnapshots(previousSnapshot, nextSnapshot) {
+  const modifiedFiles = [];
+  const removedFiles = [];
+
+  for (const [file, signature] of nextSnapshot) {
+    if (previousSnapshot.get(file) !== signature) {
+      modifiedFiles.push(file);
+    }
+  }
+
+  for (const file of previousSnapshot.keys()) {
+    if (!nextSnapshot.has(file)) {
+      removedFiles.push(file);
+    }
+  }
+
+  return { modifiedFiles, removedFiles };
+}
+
 function startDevExtractorWatch(options = {}) {
   const cwd = options.cwd || process.cwd();
   if (devWatcherByCwd.has(cwd)) return;
@@ -32,8 +111,11 @@ function startDevExtractorWatch(options = {}) {
   let running = Promise.resolve();
   let timer;
   let pendingFiles = new Set();
+  let pendingRemovedFiles = new Set();
   let pendingFullScan = false;
   const watchers = [];
+  let pollTimer;
+  let lastSnapshot;
 
   const enqueue = (task) => {
     running = running.then(task, task);
@@ -41,8 +123,10 @@ function startDevExtractorWatch(options = {}) {
   };
   const flush = async () => {
     const files = Array.from(pendingFiles);
+    const removedFiles = Array.from(pendingRemovedFiles);
     const shouldFullScan = pendingFullScan;
     pendingFiles = new Set();
+    pendingRemovedFiles = new Set();
     pendingFullScan = false;
 
     await enqueue(async () => {
@@ -50,31 +134,36 @@ function startDevExtractorWatch(options = {}) {
         await extractor.fullScan('dev-watch');
         return;
       }
-      await extractor.scanChanged({ reason: 'dev-watch', modifiedFiles: files });
+      await extractor.scanChanged({ reason: 'dev-watch', modifiedFiles: files, removedFiles });
     }).catch((error) => {
       console.error(error instanceof Error ? error.stack || error.message : String(error));
     });
   };
-  const schedule = (files) => {
-    if (!files) {
+  const schedule = (input) => {
+    if (!input) {
       pendingFullScan = true;
     } else {
-      for (const file of files) pendingFiles.add(file);
+      for (const file of input.modifiedFiles || []) pendingFiles.add(file);
+      for (const file of input.removedFiles || []) pendingRemovedFiles.add(file);
     }
     clearTimeout(timer);
     timer = setTimeout(flush, 120);
   };
 
-  enqueue(() => extractor.fullScan('dev-start')).catch((error) => {
+  lastSnapshot = createWatchSnapshot(extractor);
+  enqueue(async () => {
+    await extractor.fullScan('dev-start');
+    lastSnapshot = createWatchSnapshot(extractor);
+  }).catch((error) => {
     console.error(error instanceof Error ? error.stack || error.message : String(error));
   });
 
   for (const sourceDir of extractor.getWatchDirs()) {
     try {
       watchers.push(
-        watch(sourceDir, { recursive: true }, (_eventType, fileName) => {
+        fs.watch(sourceDir, { recursive: true }, (_eventType, fileName) => {
           const changedFile = fileName ? path.join(sourceDir, fileName.toString()) : undefined;
-          schedule(changedFile ? [changedFile] : undefined);
+          schedule(changedFile ? { modifiedFiles: [changedFile] } : undefined);
         }),
       );
     } catch (error) {
@@ -86,9 +175,21 @@ function startDevExtractorWatch(options = {}) {
     }
   }
 
+  pollTimer = setInterval(() => {
+    const nextSnapshot = createWatchSnapshot(extractor);
+    const diff = diffWatchSnapshots(lastSnapshot, nextSnapshot);
+    lastSnapshot = nextSnapshot;
+
+    if (diff.modifiedFiles.length > 0 || diff.removedFiles.length > 0) {
+      schedule(diff);
+    }
+  }, DEV_WATCH_POLL_INTERVAL_MS);
+  if (typeof pollTimer.unref === 'function') pollTimer.unref();
+
   devWatcherByCwd.set(cwd, {
     close() {
       clearTimeout(timer);
+      clearInterval(pollTimer);
       for (const watcher of watchers) watcher.close();
     },
   });
