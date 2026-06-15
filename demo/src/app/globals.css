@@ -1,0 +1,14 @@
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+  line-height: 1.6;
+  margin: 0;
+}
+
+h1 { font-size: 1.8rem; }
+h2 { font-size: 1.3rem; }
+hr { margin: 1.5rem 0; border-color: #eee; }
+button {
+  padding: 0.4rem 1rem;
+  font-size: 1rem;
+  cursor: pointer;
+}

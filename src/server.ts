@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { readFile } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { createTranslator, type TranslateHook, type TranslationMessages } from './translator';
 import { getEnvMessageIdOptions, type MessageIdOptions } from './id';
@@ -67,6 +67,35 @@ export async function loadLiteralI18nConfig(cwd = process.cwd()): Promise<Litera
 
     const configModule = await import(pathToFileURL(configPath).href);
     return normalizeConfigOptions(configModule.default ?? configModule);
+  } catch {
+    // import() 在 webpack 打包环境下会被拦截。
+    // 回退到从源文件中 regex 提取运行时配置（只有简单字段，不含 hook）。
+    return extractConfigFromSource(cwd);
+  }
+}
+
+/** 当动态 import 不可用时（webpack 环境），用正则从源文件提取简单配置字段。 */
+function extractConfigFromSource(cwd: string): LiteralI18nRuntimeConfig {
+  const configPath = resolveConfigPath(cwd);
+  if (!configPath) return {};
+
+  try {
+    const src = readFileSync(configPath, 'utf8');
+    const config: Record<string, unknown> = {};
+
+    const localeDir = src.match(/localeDir\s*[=:]\s*['"]([^'"]+)['"]/);
+    if (localeDir) config.localeDir = localeDir[1];
+
+    const keyMode = src.match(/keyMode\s*[=:]\s*['"]([^'"]+)['"]/);
+    if (keyMode && keyMode[1] === 'hash') config.keyMode = 'hash';
+
+    const idPrefix = src.match(/idPrefix\s*[=:]\s*['"]([^'"]+)['"]/);
+    if (idPrefix) config.idPrefix = idPrefix[1];
+
+    const idLength = src.match(/idLength\s*[=:]\s*(\d+)/);
+    if (idLength) config.idLength = Number(idLength[1]);
+
+    return normalizeConfigOptions(config);
   } catch {
     return {};
   }

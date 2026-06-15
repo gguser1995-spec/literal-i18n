@@ -1,8 +1,10 @@
 node_modules
 dist
-messages
+/messages
+/src/messages
 .next
-.env*
+/.env*
+.env.local
 npm-debug.log*
 pnpm-debug.log*
 yarn-debug.log*
