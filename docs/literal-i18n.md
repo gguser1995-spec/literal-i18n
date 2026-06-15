@@ -38,6 +38,27 @@ NEXT_PUBLIC_LITERAL_I18N_ID_LENGTH=16
 npm install literal-i18n
 ```
 
+### 快速体验 Demo
+
+项目内置了两个示例项目：
+
+```bash
+# Next.js 15 版（demo/）
+cd demo
+npm install
+# 编辑 .env，填入你自己的 DeepSeek API Key
+# 申请地址：https://platform.deepseek.com/api_keys
+npm run dev
+
+# Next.js 16 版（demo-next-16/）
+cd demo-next-16
+npm install
+# 同样需要先配置 DeepSeek API Key
+npm run dev
+```
+
+> ⚠️ Demo 的翻译功能依赖 DeepSeek API，请使用 **你自己申请的 API Key**，不要使用示例中的占位 key。
+
 建议先建一个独立配置文件，让 Next 插件和 CLI 共用同一份配置：
 
 ```js

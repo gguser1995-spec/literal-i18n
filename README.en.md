@@ -38,6 +38,27 @@ NEXT_PUBLIC_LITERAL_I18N_ID_LENGTH=16
 npm install literal-i18n
 ```
 
+### Try the Demo
+
+Two demo projects are included:
+
+```bash
+# Next.js 15 (demo/)
+cd demo
+npm install
+# Edit .env and insert your own DeepSeek API Key
+# Get one at: https://platform.deepseek.com/api_keys
+npm run dev
+
+# Next.js 16 (demo-next-16/)
+cd demo-next-16
+npm install
+# Same — configure your own DeepSeek API Key first
+npm run dev
+```
+
+> ⚠️ The demo uses DeepSeek API for translation. **Use your own API Key**, not the placeholder in `.env`.
+
 Create a shared config file first. Both the Next plugin and the CLI can use it:
 
 ```js
