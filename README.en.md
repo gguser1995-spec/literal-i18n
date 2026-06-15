@@ -698,4 +698,4 @@ If you encounter a bug, have a feature request, or have questions about configur
 
 **👉 https://github.com/gguser1995-spec/literal-i18n/issues**
 
-Pull Requests are also welcome.
+⚠️ **Please file an Issue first. Direct Pull Requests will not be accepted.**
