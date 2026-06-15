@@ -2,7 +2,7 @@
 
 Literal I18n 是一个“直接用原文作为翻译源”的 React / Next.js 国际化工具。
 
-你不需要维护 `home.title` 这类 key：
+你不需要先维护 `home.title` 这类 key：
 
 ```tsx
 import { T } from 'literal-i18n';
@@ -12,13 +12,23 @@ import { T } from 'literal-i18n';
 
 抽取器会从源码里收集静态原文，生成 JSON，再通过你提供的异步翻译函数补齐目标语言。
 
-## 核心理念
+## 你需要先准备什么
 
-- 组件里用 `<T />`。
-- 客户端组件函数里用 `useTranslate()`。
-- 服务端请求里用 `getLocaleTranslator(locale)` 或 `getTranslator()`。
-- 非组件环境里显式用 `createTranslator({ locale, messages })`。
-- 异步翻译只发生在抽取/生成 JSON 阶段，不发生在页面渲染阶段。
+接入前先确定这几件事：
+
+- 源语言：例如 `en`
+- 目标语言：例如 `zh`、`de`、`ja`
+- JSON 输出目录：例如 `src/messages`
+- key 模式：`source` 或 `hash`
+- 翻译方式：自己实现 `translateJsonHook`，或使用包里可选的 OpenAI-compatible helper
+
+推荐生产项目使用 hash key：
+
+```env
+NEXT_PUBLIC_LITERAL_I18N_KEY_MODE=hash
+NEXT_PUBLIC_LITERAL_I18N_ID_PREFIX=m_
+NEXT_PUBLIC_LITERAL_I18N_ID_LENGTH=16
+```
 
 ## 安装
 
@@ -26,7 +36,104 @@ import { T } from 'literal-i18n';
 npm install literal-i18n
 ```
 
-## React 组件
+如果你使用 Next.js 16 且开启 Turbopack，建议显式准备抽取脚本：
+
+```json
+{
+  "scripts": {
+    "i18n:extract": "literal-i18n-extract src --out src/messages/en.json --source-map-out src/messages/source-map.json",
+    "build": "npm run i18n:extract && next build"
+  }
+}
+```
+
+## 配置 next.config.ts
+
+```ts
+import type { NextConfig } from 'next';
+import withLiteralI18n from 'literal-i18n/next';
+
+const nextConfig: NextConfig = {};
+
+export default withLiteralI18n(nextConfig, {
+  sourceDir: 'src',
+  sourceOutput: 'src/messages/en.json',
+  localeDir: 'src/messages',
+  locales: ['en', 'zh', 'de'],
+  sourceLocale: 'en',
+  keyMode: 'hash',
+  idPrefix: 'm_',
+  idLength: 16,
+  async translateJsonHook(input) {
+    return await translateMissingTexts(input);
+  },
+});
+```
+
+会维护这些文件：
+
+```txt
+src/messages/en.json
+src/messages/zh.json
+src/messages/de.json
+src/messages/source-map.json
+```
+
+如果你使用多个 Next 插件，可以组合：
+
+```ts
+export default withOtherPlugin(
+  withLiteralI18n(nextConfig, literalI18nOptions),
+);
+```
+
+### Next.js 16 和 Turbopack
+
+`withLiteralI18n` 会在检测到宿主项目使用 Next.js 16 且没有配置 `turbopack` 时，自动补一个空的 `turbopack: {}`，避免 Next.js 因为同时看到 webpack config 和 Turbopack build 而报错。
+
+需要注意：当前 Next 插件的自动 watch/build 抽取依赖 webpack hook。Turbopack 模式下 webpack hook 可能不会参与编译流程。如果你使用 Turbopack，推荐在脚本里显式运行 CLI。
+
+如果你希望继续使用 Next 插件在构建阶段自动抽取，可以使用 webpack 构建：
+
+```bash
+next build --webpack
+```
+
+## 配置 I18nProvider
+
+在 App Router 中，通常在 locale layout 里加载当前语言 JSON：
+
+```tsx
+import { I18nProvider } from 'literal-i18n';
+import { loadMessages } from 'literal-i18n/server';
+
+export default async function LocaleLayout({ children, params }) {
+  const { locale } = await params;
+  const messages = await loadMessages(locale);
+
+  return (
+    <I18nProvider
+      locale={locale}
+      messages={messages}
+      keyMode="hash"
+      idPrefix="m_"
+      idLength={16}
+    >
+      {children}
+    </I18nProvider>
+  );
+}
+```
+
+`messages` 是扁平 JSON：
+
+```json
+{
+  "m_073083b5b1d08690": "你好世界"
+}
+```
+
+## 组件内使用
 
 ```tsx
 import { T } from 'literal-i18n';
@@ -43,8 +150,6 @@ import { T } from 'literal-i18n';
   name={<span className="text-red-500">Tom</span>}
 />
 ```
-
-翻译后的文案可以调整占位符位置，只要保留 `{name}` 即可。
 
 在 Next.js App Router 中，如果你给 `<T />` 传 ReactNode 插值，例如 `<span />`，建议把这段使用放在 client component 里：
 
@@ -81,7 +186,13 @@ export function Title() {
 }
 ```
 
-`useTranslate()` 读取最近的 `I18nProvider`，所以能拿到当前 locale 对应的 messages。
+支持给 `tr` 起别名，AST 也能识别：
+
+```tsx
+const { tr: t } = useTranslate();
+
+t('Client text');
+```
 
 ## Next.js 服务端
 
@@ -105,8 +216,6 @@ const { tr } = await getTranslator();
 tr('Server rendered text');
 ```
 
-`useTranslate()`、`getTranslator()`、`getLocaleTranslator()` 解构出来的 `tr`，以及 `createTranslator()` 返回的本地函数，都会被 AST 识别。
-
 ## 非组件环境
 
 非组件环境不要依赖全局状态。请显式创建 translator：
@@ -123,146 +232,45 @@ const t = createTranslator({
 t('Hello {name}', { name: 'Tom' });
 ```
 
-## Provider
+## 用 id 区分相同原文的不同语境
+
+同一句英文在不同场景可能需要不同翻译，比如 `Post` 可以是“发布”，也可以是“帖子”。可以给 `<T />` 或 `tr()` 加 `id`：
 
 ```tsx
-import { I18nProvider } from 'literal-i18n';
-
-<I18nProvider locale={locale} messages={messages}>
-  {children}
-</I18nProvider>
+<T text="Post" id="button" />
+<T text="Post" id="noun" />
 ```
 
-`messages` 是扁平 JSON：
+```ts
+const { tr } = useTranslate();
+
+tr('Post', undefined, { id: 'button' });
+tr('Post', undefined, { id: 'noun' });
+```
+
+source 模式会生成：
 
 ```json
 {
-  "Hello {name}": "你好 {name}"
+  "Post_button": "发布",
+  "Post_noun": "帖子"
 }
 ```
 
-`I18nProvider` 也支持 hash key 模式：
+hash 模式会把 `text + id` 一起生成稳定 hash：
+
+```json
+{
+  "m_xxxx": "发布",
+  "m_yyyy": "帖子"
+}
+```
+
+`id` 只用于区分翻译语境，不会作为插值参数。如果你需要插值 `{id}`，请使用 `params`：
 
 ```tsx
-<I18nProvider
-  locale={locale}
-  messages={messages}
-  keyMode="hash"
-  idPrefix="m_"
-  idLength={16}
->
-  {children}
-</I18nProvider>
+<T text="ID is {id}" params={{ id: userId }} />
 ```
-
-## Next.js 插件
-
-```ts
-import type { NextConfig } from 'next';
-import withLiteralI18n from 'literal-i18n/next';
-
-const nextConfig: NextConfig = {};
-
-export default withLiteralI18n(nextConfig, {
-  sourceDir: 'src',
-  sourceOutput: 'src/messages/en.json',
-  localeDir: 'src/messages',
-  locales: ['en', 'zh', 'ja'],
-  sourceLocale: 'en',
-  keyMode: 'hash',
-  idPrefix: 'm_',
-  idLength: 16,
-  async translateJsonHook({ locale, sourceLocale, missingTexts }) {
-    return await translateMissingTexts({
-      locale,
-      sourceLocale,
-      texts: missingTexts,
-    });
-  },
-});
-```
-
-如果你使用多个 Next 插件，可以组合：
-
-```ts
-export default withOtherPlugin(
-  withLiteralI18n(nextConfig, literalI18nOptions),
-);
-```
-
-### Next.js 16 和 Turbopack
-
-`withLiteralI18n` 会在检测到宿主项目使用 Next.js 16 且没有配置 `turbopack` 时，自动补一个空的 `turbopack: {}`，避免 Next.js 因为同时看到 webpack config 和 Turbopack build 而报错。
-
-需要注意：当前 Next 插件的自动 watch/build 抽取依赖 webpack hook。Turbopack 模式下 webpack hook 可能不会参与编译流程。如果你使用 Turbopack，推荐在脚本里显式运行 CLI：
-
-```json
-{
-  "scripts": {
-    "i18n:extract": "literal-i18n-extract src --out src/messages/en.json --source-map-out src/messages/source-map.json",
-    "build": "npm run i18n:extract && next build"
-  }
-}
-```
-
-如果你希望继续使用 Next 插件在构建阶段自动抽取，可以使用 webpack 构建：
-
-```bash
-next build --webpack
-```
-
-## 配置语言和输出目录
-
-```ts
-withLiteralI18n(nextConfig, {
-  sourceOutput: 'src/messages/en.json',
-  localeDir: 'src/messages',
-  locales: ['en', 'de', 'zh'],
-  sourceLocale: 'en',
-});
-```
-
-会维护：
-
-```txt
-src/messages/en.json
-src/messages/de.json
-src/messages/zh.json
-```
-
-## Hash Key 模式
-
-默认 `source` 模式会把原文直接作为 key：
-
-```json
-{
-  "Hello World": "你好世界"
-}
-```
-
-开启 hash 模式后：
-
-```json
-{
-  "m_073083b5b1d08690": "你好世界"
-}
-```
-
-配置：
-
-```env
-NEXT_PUBLIC_LITERAL_I18N_KEY_MODE=hash
-NEXT_PUBLIC_LITERAL_I18N_ID_PREFIX=m_
-NEXT_PUBLIC_LITERAL_I18N_ID_LENGTH=16
-```
-
-`sourceMapOutput` 是可选的。hash 模式下它可以输出 `原文 -> hash key`，方便排查：
-
-```ts
-sourceMapOutput: 'src/messages/source-map.json'
-```
-
-source 模式基本不需要 `sourceMapOutput`，因为 key 本身就是原文。
 
 ## AST 抽取规则
 
@@ -277,17 +285,19 @@ import { getTranslator, getLocaleTranslator } from 'literal-i18n/server';
 
 ```tsx
 <T text="Hello World" />
+<T text="Post" id="button" />
 <T text="Hello {name}" name={user.name} />
 ```
 
 ```tsx
 const { tr } = useTranslate();
 tr('Client text');
+tr('Post', undefined, { id: 'button' });
 ```
 
 ```ts
-const { tr } = await getLocaleTranslator(locale);
-tr('Server text');
+const { tr: t } = await getLocaleTranslator(locale);
+t('Server text');
 ```
 
 ```ts
@@ -295,13 +305,15 @@ const t = createTranslator({ locale, messages });
 t('Dictionary text');
 ```
 
-不支持动态原文：
+不支持动态原文或动态 id：
 
 ```tsx
 <T text={title} />
 <T text={`Hello ${name}`} />
-t(variable)
-t(getTitle())
+<T text="Post" id={type} />
+tr(variable)
+tr(getTitle())
+tr('Post', undefined, { id: type })
 ```
 
 这些写法会在扫描时输出 warning。
@@ -328,11 +340,12 @@ withLiteralI18n(nextConfig, {
 withLiteralI18n(nextConfig, {
   locales: ['zh'],
   sourceLocale: 'en',
-  async translateJsonHook({ locale, sourceLocale, missingTexts }) {
+  async translateJsonHook({ locale, sourceLocale, missingTexts, missingMessages }) {
     return await myTranslateBatch({
       locale,
       sourceLocale,
       texts: missingTexts,
+      messages: missingMessages,
     });
   },
 });
@@ -344,7 +357,7 @@ withLiteralI18n(nextConfig, {
 Record<string, string>
 ```
 
-key 是原文，value 是译文。
+key 可以是原文，也可以是生成后的 message key。对于带 `id` 的相同原文，推荐返回生成后的 message key，避免不同语境互相覆盖。
 
 ### `translateHook`
 
@@ -352,8 +365,8 @@ key 是原文，value 是译文。
 
 ```ts
 withLiteralI18n(nextConfig, {
-  async translateHook({ text, locale, sourceLocale }) {
-    return await myTranslateOne({ text, locale, sourceLocale });
+  async translateHook({ text, key, id, locale, sourceLocale }) {
+    return await myTranslateOne({ text, key, id, locale, sourceLocale });
   },
 });
 ```
@@ -399,6 +412,41 @@ const translateJsonHook = createLocalTranslateJsonHook({
 ```
 
 文档不假设你使用某个具体本地服务或某个具体模型。你可以接 DeepSeek、OpenAI-compatible API、自建服务，或者完全自己实现。
+
+## Hash Key 模式
+
+默认 `source` 模式会把原文直接作为 key：
+
+```json
+{
+  "Hello World": "你好世界"
+}
+```
+
+开启 hash 模式后：
+
+```json
+{
+  "m_073083b5b1d08690": "你好世界"
+}
+```
+
+`sourceMapOutput` 是可选的。hash 模式下它可以输出 `原文 -> hash key`，方便排查：
+
+```ts
+sourceMapOutput: 'src/messages/source-map.json'
+```
+
+带 `id` 的 source map key 会显示为 `原文_id`：
+
+```json
+{
+  "Post_button": "m_xxxx",
+  "Post_noun": "m_yyyy"
+}
+```
+
+source 模式基本不需要 `sourceMapOutput`，因为 key 本身就是原文。
 
 ## API Reference
 

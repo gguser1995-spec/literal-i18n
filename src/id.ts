@@ -6,8 +6,13 @@ export interface MessageIdOptions {
   idLength?: number;
 }
 
+export interface MessageKeyOptions extends MessageIdOptions {
+  id?: string;
+}
+
 const DEFAULT_ID_PREFIX = 'm_';
 const DEFAULT_ID_LENGTH = 16;
+const MESSAGE_ID_SEPARATOR = '\u0000';
 
 function normalizeIdLength(length?: number): number {
   if (typeof length !== 'number' || !Number.isFinite(length)) return DEFAULT_ID_LENGTH;
@@ -36,15 +41,32 @@ function hashText(text: string): string {
     .padStart(8, '0')}`;
 }
 
-export function createMessageId(text: string, options: MessageIdOptions = {}): string {
+function normalizeMessageContextId(id?: string): string | undefined {
+  if (typeof id !== 'string') return undefined;
+  const normalizedId = id.trim();
+  return normalizedId || undefined;
+}
+
+function getHashInput(text: string, id?: string): string {
+  const contextId = normalizeMessageContextId(id);
+  return contextId ? `${text}${MESSAGE_ID_SEPARATOR}${contextId}` : text;
+}
+
+export function createMessageId(text: string, options: MessageKeyOptions = {}): string {
   const prefix = options.idPrefix ?? DEFAULT_ID_PREFIX;
   const length = normalizeIdLength(options.idLength);
 
-  return `${prefix}${hashText(text).slice(0, length)}`;
+  return `${prefix}${hashText(getHashInput(text, options.id)).slice(0, length)}`;
 }
 
-export function getMessageKey(text: string, options: MessageIdOptions = {}): string {
-  return options.keyMode === 'hash' ? createMessageId(text, options) : text;
+export function getMessageKey(text: string, options: MessageKeyOptions = {}): string {
+  const contextId = normalizeMessageContextId(options.id);
+
+  if (options.keyMode === 'hash') {
+    return createMessageId(text, options);
+  }
+
+  return contextId ? `${text}_${contextId}` : text;
 }
 
 export function getEnvMessageIdOptions(): MessageIdOptions {

@@ -5,6 +5,7 @@ export {
 } from './id';
 export type {
   MessageIdOptions,
+  MessageKeyOptions,
   TranslationKeyMode,
 } from './id';
 export {
@@ -13,6 +14,7 @@ export {
 } from './translator';
 export type {
   TranslateHook,
+  TranslateOptions,
   TranslateParamValue,
   TranslateParams,
   TranslationMessages,
@@ -32,6 +34,7 @@ export type {
   AfterExtractHook,
   ExtractHookResult,
   MaybePromise,
+  TranslateJsonMessage,
   TranslateJsonHook,
   TranslateJsonHookInput,
   TranslateTextHook,

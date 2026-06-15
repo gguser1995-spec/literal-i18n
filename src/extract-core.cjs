@@ -83,11 +83,25 @@ function hashText(text) {
 }
 
 function createMessageId(text, options = {}) {
-  return `${options.idPrefix || DEFAULT_ID_PREFIX}${hashText(text).slice(0, options.idLength || DEFAULT_ID_LENGTH)}`;
+  const id = normalizeMessageContextId(options.id);
+  const hashInput = id ? `${text}\u0000${id}` : text;
+  return `${options.idPrefix || DEFAULT_ID_PREFIX}${hashText(hashInput).slice(0, options.idLength || DEFAULT_ID_LENGTH)}`;
 }
 
 function getMessageKey(text, options = {}) {
-  return options.keyMode === 'hash' ? createMessageId(text, options) : text;
+  const id = normalizeMessageContextId(options.id);
+  if (options.keyMode === 'hash') return createMessageId(text, options);
+  return id ? `${text}_${id}` : text;
+}
+
+function normalizeMessageContextId(id) {
+  if (typeof id !== 'string') return undefined;
+  const normalizedId = id.trim();
+  return normalizedId || undefined;
+}
+
+function getSourceMapKey(record) {
+  return record.id ? `${record.text}_${record.id}` : record.text;
 }
 
 function normalizeOptions(options = {}) {
@@ -226,6 +240,43 @@ function getStaticString(node) {
   return undefined;
 }
 
+function getJsxStaticStringAttribute(node, name) {
+  const attribute = node.attributes.properties.find((property) => {
+    return ts.isJsxAttribute(property) && property.name.text === name;
+  });
+
+  if (!attribute || !ts.isJsxAttribute(attribute)) return { attribute: undefined, value: undefined };
+  if (!attribute.initializer) return { attribute, value: undefined };
+  if (ts.isStringLiteral(attribute.initializer)) {
+    return { attribute, value: attribute.initializer.text };
+  }
+
+  return { attribute, value: undefined };
+}
+
+function getObjectLiteralStaticStringProperty(node, name) {
+  if (!node || !ts.isObjectLiteralExpression(node)) return { found: false, value: undefined, node };
+
+  for (const property of node.properties) {
+    if (!ts.isPropertyAssignment(property)) continue;
+
+    const propertyName = property.name;
+    const isTargetName =
+      (ts.isIdentifier(propertyName) && propertyName.text === name) ||
+      (ts.isStringLiteral(propertyName) && propertyName.text === name);
+
+    if (!isTargetName) continue;
+
+    return {
+      found: true,
+      value: getStaticString(property.initializer),
+      node: property.initializer,
+    };
+  }
+
+  return { found: false, value: undefined, node };
+}
+
 function getLineAndColumn(sourceFile, node) {
   const position = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
   return {
@@ -279,9 +330,10 @@ function extractFromSource(filePath, sourceText, options = {}) {
   const records = [];
   const warnings = [];
 
-  function addRecord(text, node, kind) {
+  function addRecord(text, node, kind, id) {
     records.push({
       text,
+      ...(id ? { id } : {}),
       kind,
       file: filePath,
       ...getLineAndColumn(sourceFile, node),
@@ -301,14 +353,16 @@ function extractFromSource(filePath, sourceText, options = {}) {
       const tagName = node.tagName.getText(sourceFile);
 
       if (imports.components.has(tagName)) {
-        const textAttribute = node.attributes.properties.find((attribute) => {
-          return ts.isJsxAttribute(attribute) && attribute.name.text === 'text';
-        });
+        const { attribute: textAttribute, value: text } = getJsxStaticStringAttribute(node, 'text');
+        const { attribute: idAttribute, value: id } = getJsxStaticStringAttribute(node, 'id');
 
-        if (!textAttribute || !ts.isJsxAttribute(textAttribute) || !textAttribute.initializer) {
+        if (!textAttribute || !textAttribute.initializer) {
           addWarning('<T /> requires a static text attribute.', node);
-        } else if (ts.isStringLiteral(textAttribute.initializer)) {
-          addRecord(textAttribute.initializer.text, textAttribute.initializer, 'component');
+        } else if (text !== undefined) {
+          if (idAttribute && id === undefined) {
+            addWarning('<T id={...} /> cannot be extracted. Use <T id="..." />.', idAttribute);
+          }
+          addRecord(text, textAttribute.initializer, 'component', id);
         } else {
           addWarning('<T text={...} /> cannot be extracted. Use <T text="..." />.', textAttribute);
         }
@@ -324,7 +378,11 @@ function extractFromSource(filePath, sourceText, options = {}) {
         if (text === undefined) {
           addWarning('tr(...) requires a static string as the first argument.', node);
         } else {
-          addRecord(text, node.arguments[0], 'function');
+          const idOption = getObjectLiteralStaticStringProperty(node.arguments[2], 'id');
+          if (idOption.found && idOption.value === undefined) {
+            addWarning('tr(...) id option must be a static string. Use { id: "..." }.', idOption.node || node);
+          }
+          addRecord(text, node.arguments[0], 'function', idOption.value);
         }
       }
     }
@@ -361,7 +419,7 @@ function extractFromSource(filePath, sourceText, options = {}) {
 
 function toSourceMap(records, options = {}) {
   return records.reduce((sourceMap, record) => {
-    sourceMap[record.text] = getMessageKey(record.text, options);
+    sourceMap[getSourceMapKey(record)] = getMessageKey(record.text, { ...options, id: record.id });
     return sourceMap;
   }, {});
 }
@@ -369,23 +427,29 @@ function toSourceMap(records, options = {}) {
 function buildSourceArtifacts(records, options = {}) {
   const sourceMessages = {};
   const sourceMap = {};
+  const sourceMeta = {};
   const idToText = {};
 
   for (const record of records) {
-    const key = getMessageKey(record.text, options);
+    const key = getMessageKey(record.text, { ...options, id: record.id });
+    const sourceMapKey = getSourceMapKey(record);
 
-    if (idToText[key] && idToText[key] !== record.text) {
+    if (idToText[key] && idToText[key] !== sourceMapKey) {
       throw new Error(
-        `[literal-i18n] Message id collision: "${idToText[key]}" and "${record.text}" both map to "${key}". Increase idLength or change idPrefix.`,
+        `[literal-i18n] Message id collision: "${idToText[key]}" and "${sourceMapKey}" both map to "${key}". Increase idLength or change idPrefix.`,
       );
     }
 
-    idToText[key] = record.text;
+    idToText[key] = sourceMapKey;
     sourceMessages[key] = record.text;
-    sourceMap[record.text] = key;
+    sourceMap[sourceMapKey] = key;
+    sourceMeta[key] = {
+      text: record.text,
+      ...(record.id ? { id: record.id } : {}),
+    };
   }
 
-  return { sourceMessages, sourceMap };
+  return { sourceMessages, sourceMap, sourceMeta };
 }
 
 function flattenRecordsByFile(recordsByFile) {
@@ -484,16 +548,17 @@ class LiteralI18nExtractor {
 
   async writeOutputs(cache, meta) {
     const records = flattenRecordsByFile(cache.files);
-    const { sourceMessages, sourceMap } = buildSourceArtifacts(records, this.options);
+    const { sourceMessages, sourceMap, sourceMeta } = buildSourceArtifacts(records, this.options);
     const sourceChanged = writeJsonIfChanged(this.options.sourceOutput, sourceMessages);
     const sourceMapChanged = this.options.sourceMapOutput
       ? writeJsonIfChanged(this.options.sourceMapOutput, sourceMap)
       : false;
-    const localeResults = await this.writeLocaleOutputs(sourceMessages);
+    const localeResults = await this.writeLocaleOutputs(sourceMessages, sourceMeta);
     const result = {
       ...meta,
       sourceMessages,
       sourceMap,
+      sourceMeta,
       records,
       sourceChanged,
       sourceMapChanged,
@@ -509,7 +574,7 @@ class LiteralI18nExtractor {
     return result;
   }
 
-  async writeLocaleOutputs(sourceMessages) {
+  async writeLocaleOutputs(sourceMessages, sourceMeta = {}) {
     const results = [];
 
     for (const locale of this.options.locales) {
@@ -544,6 +609,14 @@ class LiteralI18nExtractor {
       const missingEntries = sourceEntries.filter(([key, sourceText]) => {
         return isMissingTranslation(getExistingValue(key, sourceText), sourceText, this.options);
       });
+      const missingMessages = missingEntries.map(([key, sourceText]) => {
+        const meta = sourceMeta[key] || {};
+        return {
+          key,
+          text: sourceText,
+          ...(meta.id ? { id: meta.id } : {}),
+        };
+      });
       const missingTexts = missingEntries.map(([, sourceText]) => sourceText);
 
       let translatedMessages = {};
@@ -558,10 +631,11 @@ class LiteralI18nExtractor {
           sourceMessages,
           existingMessages,
           missingTexts,
+          missingMessages,
         });
         if (isRecord(hookResult)) {
           translatedMessages = missingEntries.reduce((messages, [key, sourceText]) => {
-            const translated = hookResult[sourceText] ?? hookResult[key];
+            const translated = hookResult[key] ?? hookResult[sourceText];
             if (typeof translated === 'string') {
               messages[key] = translated;
             }
@@ -573,6 +647,8 @@ class LiteralI18nExtractor {
         for (const [key, text] of missingEntries) {
           const translated = await this.options.translateHook({
             text,
+            key,
+            id: sourceMeta[key]?.id,
             locale,
             sourceLocale: this.options.sourceLocale,
           });

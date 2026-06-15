@@ -36,6 +36,7 @@ export interface I18nProviderProps extends MessageIdOptions {
 
 export type TProps = {
   text: string;
+  id?: string;
   params?: TranslateNodeParams;
 };
 
@@ -79,6 +80,7 @@ export function useI18n(): I18nContextValue {
 
 export function T({
   text,
+  id,
   params,
   ...inlineParams
 }: TProps & Record<string, unknown>) {
@@ -87,7 +89,7 @@ export function T({
     ...params,
     ...inlineParams,
   } as TranslateNodeParams;
-  const translated = translate(text, undefined, locale);
+  const translated = translate(text, undefined, id ? { locale, id } : locale);
 
   return <>{formatReactMessage(translated, mergedParams)}</>;
 }

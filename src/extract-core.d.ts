@@ -3,6 +3,7 @@ import type { MessageIdOptions } from './id';
 
 export interface ExtractRecord {
   text: string;
+  id?: string;
   kind: 'component' | 'function';
   file: string;
   line: number;
@@ -47,6 +48,7 @@ export interface ExtractResult {
   warnings: ExtractWarning[];
   sourceMessages: Record<string, string>;
   sourceMap: Record<string, string>;
+  sourceMeta: Record<string, { text: string; id?: string }>;
   records: ExtractRecord[];
   sourceChanged: boolean;
   sourceMapChanged: boolean;
