@@ -19,7 +19,9 @@ function getInstalledNextMajor(cwd) {
 }
 
 function isNextDevCommand() {
-  return process.env.NODE_ENV !== 'production' && process.argv.some((arg) => arg === 'dev');
+  if (process.env.NODE_ENV === 'production') return false;
+  if (process.env.NODE_ENV === 'development') return true;
+  return process.argv.some((arg) => arg === 'dev');
 }
 
 function isWebpackCommand() {
@@ -113,7 +115,6 @@ function startDevExtractorWatch(options = {}) {
   let pendingFiles = new Set();
   let pendingRemovedFiles = new Set();
   let pendingFullScan = false;
-  const watchers = [];
   let pollTimer;
   let lastSnapshot;
 
@@ -132,9 +133,11 @@ function startDevExtractorWatch(options = {}) {
     await enqueue(async () => {
       if (shouldFullScan) {
         await extractor.fullScan('dev-watch');
+        lastSnapshot = createWatchSnapshot(extractor);
         return;
       }
       await extractor.scanChanged({ reason: 'dev-watch', modifiedFiles: files, removedFiles });
+      lastSnapshot = createWatchSnapshot(extractor);
     }).catch((error) => {
       console.error(error instanceof Error ? error.stack || error.message : String(error));
     });
@@ -158,23 +161,6 @@ function startDevExtractorWatch(options = {}) {
     console.error(error instanceof Error ? error.stack || error.message : String(error));
   });
 
-  for (const sourceDir of extractor.getWatchDirs()) {
-    try {
-      watchers.push(
-        fs.watch(sourceDir, { recursive: true }, (_eventType, fileName) => {
-          const changedFile = fileName ? path.join(sourceDir, fileName.toString()) : undefined;
-          schedule(changedFile ? { modifiedFiles: [changedFile] } : undefined);
-        }),
-      );
-    } catch (error) {
-      console.warn(
-        `[literal-i18n] dev watch unavailable for ${sourceDir}: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-    }
-  }
-
   pollTimer = setInterval(() => {
     const nextSnapshot = createWatchSnapshot(extractor);
     const diff = diffWatchSnapshots(lastSnapshot, nextSnapshot);
@@ -190,7 +176,6 @@ function startDevExtractorWatch(options = {}) {
     close() {
       clearTimeout(timer);
       clearInterval(pollTimer);
-      for (const watcher of watchers) watcher.close();
     },
   });
 
