@@ -14,6 +14,8 @@ import { T } from 'literal-i18n';
 
 抽取器会从源码里收集静态原文，生成 JSON，再通过你提供的异步翻译函数补齐目标语言。
 
+![Demo](docs/output.gif)
+
 ## 你需要先准备什么
 
 接入前先确定这几件事：
