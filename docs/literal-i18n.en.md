@@ -14,6 +14,8 @@ import { T } from 'literal-i18n';
 
 The extractor scans static source text from your code, writes JSON files, and fills target locales through your own async translation hook.
 
+![Demo](output.gif)
+
 ## Before You Start
 
 Decide these items first:
