@@ -1,11 +1,14 @@
 # Changelog
 
-## 0.1.10 (2026-06-17)
+## 0.1.11 (2026-06-17)
 
 ### Changed
 
 - `treatSourceAsMissing` now defaults to `false`, so target translations that intentionally match the source text are not retranslated on each extraction.
 - Missing target translations are no longer written as source-text placeholders, allowing untranslated entries to keep flowing through `translateJsonHook` on later extractions.
+- Development extraction now starts the internal watcher by default, so AST scanning runs on project startup without waiting for the first page request.
+- The internal dev watcher now advances its file snapshot only after a successful extraction, and retries a full scan on the next source diff if startup extraction fails.
+- Locale output writes are serialized per output file, preventing overlapping extractor instances from sending duplicate translation requests for the same missing messages.
 
 ### Documentation
 
@@ -16,17 +19,17 @@
 
 ### Fixed
 
-- **`getI18nProviderProps` / `loadLiteralI18nConfig` 在 Next.js webpack 打包环境下配置加载失败的问题。**  
-  当动态 `import()` 被 webpack 拦截时，自动回退到从源文件中正则提取简单运行时配置（`localeDir`、`keyMode`、`idPrefix`、`idLength`），确保 Next.js 15 + App Router 下能正常使用 `getI18nProviderProps(locale)`。
+- **Fixed `getI18nProviderProps` / `loadLiteralI18nConfig` config loading in Next.js webpack bundles.**  
+  When webpack intercepts dynamic `import()`, the runtime now falls back to extracting simple config values (`localeDir`, `keyMode`, `idPrefix`, `idLength`) from the source file, so `getI18nProviderProps(locale)` works correctly with Next.js 15 + App Router.
 
 ### Added
 
-- Next.js 16 初步支持验证。
-- 新增 `demo/`（Next.js 15）和 `demo-next-16/`（Next.js 16）示例项目。
+- Added preliminary Next.js 16 support validation.
+- Added `demo/` (Next.js 15) and `demo-next-16/` (Next.js 16) example projects.
 
 ## 0.1.7 (2026-06-15)
 
-- 发布到 npm 并弃用 0.1.5。
+- Published to npm and deprecated 0.1.5.
 
 ## 0.1.6
 

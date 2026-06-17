@@ -61,8 +61,8 @@ npm run dev
 
 > ⚠️ The demo uses DeepSeek API for translation. **Use your own API Key**, not the placeholder in `.env`.
 
-> 💡 **Dev experience**: Next.js 15 demo uses webpack HMR — changes are **reflected instantly**.
-> Next.js 16 demo uses Turbopack — **manually refresh the page** to see changes.
+> 💡 **Dev experience**: AST extraction and translation file generation run automatically in development.
+> With Next.js 16 / Turbopack, you may need to **manually refresh the page** after translation files change to see the latest text.
 
 Create a shared config file first. Both the Next plugin and the CLI can use it:
 
@@ -102,9 +102,9 @@ For Next.js 16 or Turbopack builds, prepare an explicit extract script:
 
 `i18n:extract` is not required in every project:
 
-- With `withLiteralI18n` and webpack, the Next plugin extracts during dev/watch/build.
-- With default Next.js 15 dev, only the webpack watcher runs; the internal watcher is not started.
-- With Next.js 16 / Turbopack dev, `withLiteralI18n` starts an internal dev watcher automatically.
+- With `withLiteralI18n`, development starts the internal watcher by default. It scans once on project startup and incrementally scans source changes.
+- With explicit `next dev --webpack`, extraction defaults back to the webpack watch hook; set `devWatch: true` if you still want startup extraction.
+- With Next.js 16 / Turbopack dev, `withLiteralI18n` starts the internal dev watcher automatically.
 - With Next.js 16 / Turbopack build, run `i18n:extract` before `next build`.
 - Without the Next plugin, or outside Next.js, use the CLI manually.
 
@@ -152,9 +152,9 @@ export default withOtherPlugin(
 
 When `withLiteralI18n` detects Next.js 16 and no `turbopack` config, it adds an empty `turbopack: {}` to avoid the "webpack config without turbopack config" error.
 
-Default Next.js 15 dev uses webpack, so `withLiteralI18n` only uses the webpack watch hook and does not start the internal dev watcher.
+Development starts an independent dev watcher by default for initial extraction and incremental updates. This lets AST extraction run on project startup, even before Next.js compiles a page because of the first browser request.
 
-Default Next.js 16 dev leans toward Turbopack, where webpack hooks may not run. In that mode, `withLiteralI18n` starts an independent dev watcher for initial extraction and incremental updates. If you explicitly run `next dev --webpack`, the internal watcher is disabled and extraction is handled by the webpack hook.
+If you explicitly run `next dev --webpack`, the internal watcher is disabled by default and extraction is handled by the webpack hook. Set `devWatch: true` when you want startup extraction even in explicit webpack dev mode.
 
 For Turbopack build, still run the CLI before `next build`:
 
@@ -207,7 +207,7 @@ Watch mode:
 literal-i18n-extract --watch
 ```
 
-Use `--watch` when you are not using the Next plugin, or when you set `devWatch: false` and want the CLI to own development extraction. By default, Next.js 15 dev is handled by webpack watch, while Next.js 16 / Turbopack dev is handled by the internal watcher.
+Use `--watch` when you are not using the Next plugin, or when you set `devWatch: false` and want the CLI to own development extraction. By default, `withLiteralI18n` uses the internal watcher in development; explicit `next dev --webpack` uses webpack watch.
 
 ## Configure I18nProvider
 
@@ -708,7 +708,7 @@ Common options:
 
 - `true`: force the internal watcher in development. Startup and source changes are scanned, webpack watch extraction is skipped, and each change is extracted once.
 - `false`: do not extract automatically in development. Run the CLI manually, or use `literal-i18n-extract --watch`.
-- Unset: Next.js 15 defaults to webpack watch; Next.js 16 defaults to the internal watcher.
+- Unset: development defaults to the internal watcher; explicit `next dev --webpack` uses webpack watch.
 
 ### `literal-i18n/local-translate-api`
 

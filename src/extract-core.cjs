@@ -54,6 +54,20 @@ function writeJsonIfChanged(filePath, value) {
   return true;
 }
 
+const localeOutputQueues = new Map();
+
+function enqueueLocaleOutput(outputPath, task) {
+  const previousTask = localeOutputQueues.get(outputPath) || Promise.resolve();
+  const currentTask = previousTask.catch(() => {}).then(task);
+  localeOutputQueues.set(outputPath, currentTask);
+  currentTask.finally(() => {
+    if (localeOutputQueues.get(outputPath) === currentTask) {
+      localeOutputQueues.delete(outputPath);
+    }
+  }).catch(() => {});
+  return currentTask;
+}
+
 function normalizeIdLength(length) {
   const numericLength = Number(length);
   if (!Number.isFinite(numericLength)) return DEFAULT_ID_LENGTH;
@@ -581,6 +595,16 @@ class LiteralI18nExtractor {
       if (locale === this.options.sourceLocale) continue;
 
       const outputPath = path.resolve(this.options.localeOutput(locale));
+      const result = await enqueueLocaleOutput(outputPath, () => {
+        return this.writeLocaleOutput(locale, outputPath, sourceMessages, sourceMeta);
+      });
+      results.push(result);
+    }
+
+    return results;
+  }
+
+  async writeLocaleOutput(locale, outputPath, sourceMessages, sourceMeta = {}) {
       const existingMessages = readJson(outputPath, {});
       const sourceEntries = Object.entries(sourceMessages);
       const getExistingValue = (key, sourceText) => {
@@ -689,16 +713,13 @@ class LiteralI18nExtractor {
         );
       }
 
-      results.push({
+      return {
         locale,
         outputPath,
         missingCount: missingTexts.length,
         translatedCount,
         changed,
-      });
-    }
-
-    return results;
+      };
   }
 
   printResult(result) {
