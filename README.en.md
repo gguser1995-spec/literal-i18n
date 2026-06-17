@@ -699,7 +699,7 @@ Common options:
 - `translateJsonHook`
 - `onExtract`
 - `keepStale`
-- `treatSourceAsMissing`: defaults to `false`. Set it to `true` to treat target values that equal the source text as missing translations.
+- `treatSourceAsMissing`: defaults to `false`. Set it to `true` to treat target values that equal the source text as missing translations. When a target locale has no valid translation, the extractor does not write a source-text placeholder; runtime rendering falls back to the source text.
 - `pruneLegacySourceKeys`
 - `progress` / `silent`
 - `devWatch`

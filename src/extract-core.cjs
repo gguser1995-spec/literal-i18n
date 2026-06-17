@@ -609,6 +609,10 @@ class LiteralI18nExtractor {
       const missingEntries = sourceEntries.filter(([key, sourceText]) => {
         return isMissingTranslation(getExistingValue(key, sourceText), sourceText, this.options);
       });
+      const missingKeys = new Set(missingEntries.map(([key]) => key));
+      for (const key of missingKeys) {
+        delete baseMessages[key];
+      }
       const missingMessages = missingEntries.map(([key, sourceText]) => {
         const meta = sourceMeta[key] || {};
         return {
@@ -666,8 +670,11 @@ class LiteralI18nExtractor {
 
       const nextMessages = {
         ...baseMessages,
-        ...Object.fromEntries(sourceEntries.map(([key, sourceText]) => {
-          return [key, getExistingValue(key, sourceText) || baseMessages[key] || sourceText];
+        ...Object.fromEntries(sourceEntries.flatMap(([key, sourceText]) => {
+          const existingValue = getExistingValue(key, sourceText);
+          return isMissingTranslation(existingValue, sourceText, this.options)
+            ? []
+            : [[key, existingValue]];
         })),
         ...translatedMessages,
       };

@@ -5,6 +5,7 @@
 ### Changed
 
 - `treatSourceAsMissing` now defaults to `false`, so target translations that intentionally match the source text are not retranslated on each extraction.
+- Missing target translations are no longer written as source-text placeholders, allowing untranslated entries to keep flowing through `translateJsonHook` on later extractions.
 
 ### Documentation
 
