@@ -699,7 +699,7 @@ Common options:
 - `translateJsonHook`
 - `onExtract`
 - `keepStale`
-- `treatSourceAsMissing`
+- `treatSourceAsMissing`: defaults to `false`. Set it to `true` to treat target values that equal the source text as missing translations.
 - `pruneLegacySourceKeys`
 - `progress` / `silent`
 - `devWatch`

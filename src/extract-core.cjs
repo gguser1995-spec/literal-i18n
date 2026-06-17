@@ -140,7 +140,7 @@ function normalizeOptions(options = {}) {
     idPrefix: options.idPrefix || DEFAULT_ID_PREFIX,
     idLength: normalizeIdLength(options.idLength),
     pruneLegacySourceKeys: options.pruneLegacySourceKeys !== false,
-    treatSourceAsMissing: options.treatSourceAsMissing !== false,
+    treatSourceAsMissing: options.treatSourceAsMissing === true,
     progress: options.progress !== false,
     silent: Boolean(options.silent),
     translateHook: options.translateHook,

@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.10 (2026-06-17)
+
+### Changed
+
+- `treatSourceAsMissing` now defaults to `false`, so target translations that intentionally match the source text are not retranslated on each extraction.
+
+### Documentation
+
+- Documented the `treatSourceAsMissing` default in `README.md` and `README.en.md`.
+- Removed duplicated Markdown docs under `docs/`; the root README files are now the canonical documentation.
+
 ## 0.1.8 (2026-06-15)
 
 ### Fixed
