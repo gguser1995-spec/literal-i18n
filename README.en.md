@@ -69,19 +69,37 @@ Create a shared config file first. Both the Next plugin and the CLI can use it:
 ```js
 // literal-i18n.config.mjs
 import { defineLiteralI18nConfig } from 'literal-i18n/next';
+import { createDeepSeekTranslateJsonHook } from 'literal-i18n/local-translate-api';
 
 export default defineLiteralI18nConfig({
   sourceDir: 'src',
   sourceOutput: 'src/messages/en.json',
   sourceMapOutput: 'src/messages/source-map.json',
   localeDir: 'src/messages',
-  locales: ['en', 'zh', 'de'],
+  locales: ['en', 'zh'],
   sourceLocale: 'en',
   keyMode: 'hash',
   idPrefix: 'm_',
   idLength: 16,
-  async translateJsonHook(input) {
-    return await translateMissingTexts(input);
+  translateJsonHook(input) {
+    // Optional example from the package — get your own DeepSeek API key and replace the function:
+    const apiKey = process.env.LITERAL_I18N_API_KEY;
+    if (!apiKey) return {};
+    const hook = createDeepSeekTranslateJsonHook({
+      baseUrl: 'https://api.deepseek.com',
+      apiKey,
+      model: 'deepseek-v4-flash',
+      batchSize: 20,
+      timeoutMs: 120000,
+      temperature: 0.1,
+      prompt: `
+      You are a professional music-website UI localizer.
+      When terms are ambiguous, prefer music-website conventions.
+      Keep translations concise and natural.
+      Preserve all placeholders unchanged.
+      Example: hello {name}=>你好 {name}`,
+    });
+    return hook(input);
   },
 });
 ```
@@ -575,6 +593,8 @@ Returning a string writes it to the target locale JSON. Returning `undefined` ke
 
 The package provides a few optional helpers for existing services. You are encouraged to write your own translation function when your product needs custom terminology, review, or caching.
 
+> **⚠️ Note**: `createOpenAICompatibleTranslateJsonHook` is exported but has not been thoroughly tested yet. It is recommended to use `createDeepSeekTranslateJsonHook` for now (it uses the same OpenAI-compatible API under the hood and is verified to work).
+
 ```ts
 import { createOpenAICompatibleTranslateJsonHook } from 'literal-i18n/local-translate-api';
 
@@ -612,6 +632,8 @@ const translateJsonHook = createLocalTranslateJsonHook({
 ```
 
 The docs do not assume a specific local service or model. You can use DeepSeek, any OpenAI-compatible API, your own service, or a fully custom implementation.
+
+> **💡 Recommendation**: When using DeepSeek, set the model to `deepseek-v4-flash` for the best balance of translation quality and response speed. `deepseek-chat` may be less efficient than `deepseek-v4-flash` for translating many short text fragments.
 
 ## Hash Key Mode
 
