@@ -4,5 +4,8 @@
   "Hello {name}": "你好 {name}",
   "This is a server component": "这是一个服务器组件",
   "Items count: {count}": "项目数量：{count}",
-  "Language": "语言"
+  "Language": "语言",
+  "my name lili": "我叫 lili",
+  "install this app": "安装这个应用",
+  "uninstall this app": "卸载此应用"
 }

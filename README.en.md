@@ -40,6 +40,31 @@ NEXT_PUBLIC_LITERAL_I18N_ID_LENGTH=16
 npm install literal-i18n
 ```
 
+## Initialize Automatically
+
+For new projects, run this command to apply the setup:
+
+```bash
+npx literal-i18n init --yes
+```
+
+To preview the planned changes first, run `npx literal-i18n init --dry-run`. Note: `npx literal-i18n init` without `--yes` only prints the plan and does not write files.
+
+When the package is installed as a project dependency, for example `"literal-i18n": "file:/Users/lwf/web3/literal-i18n"`, the bare `literal-i18n init` command is usually not available in your global shell PATH. Use `npx literal-i18n init --yes`, `npm exec literal-i18n -- init --yes`, or call `literal-i18n ...` from `package.json` scripts.
+
+`init` detects the current project and conservatively creates or updates:
+
+- `literal-i18n.config.ts`
+- `src/messages/`
+- `.env.example`
+- `package.json` scripts for `i18n:extract` / `i18n:watch`
+- `src/middleware.ts` for Next.js 15, or `src/proxy.ts` for Next.js 16
+- simple `next.config.ts/mjs/js` files by wrapping them with `withLiteralI18n(...)`
+
+The generated `literal-i18n.config.ts` includes a DeepSeek `translateJsonHook` by default. When `LITERAL_I18N_API_KEY` is missing from `.env` / `.env.local`, it safely returns an empty result and only extracts messages; after you add the key, missing target locales are translated automatically.
+
+If the project already has `next.config`, `middleware`, or `proxy`, `init` does not blindly overwrite them. Simple `next.config` files are wrapped automatically; complex config files or existing middleware/proxy files receive a manual merge suggestion. Running `init` repeatedly does not duplicate setup.
+
 ### Try the Demo
 
 Two demo projects are included:
@@ -64,7 +89,7 @@ npm run dev
 > 💡 **Dev experience**: AST extraction and translation file generation run automatically in development.
 > With Next.js 16 / Turbopack, you may need to **manually refresh the page** after translation files change to see the latest text.
 
-Create a shared config file first. Both the Next plugin and the CLI can use it:
+If you do not use `init`, create a shared config file manually. Both the Next plugin and the CLI can use it:
 
 ```js
 // literal-i18n.config.mjs
@@ -106,13 +131,15 @@ export default defineLiteralI18nConfig({
 
 The CLI automatically reads `literal-i18n.config.mjs`, `.js`, `.cjs`, `.ts`, or `.json` from your project root.
 
+`literal-i18n.config.ts` is loaded through the built-in TypeScript transpile path, so it can contain `defineLiteralI18nConfig(...)`, `translateJsonHook`, and other extractor/plugin options. App Router runtime helpers also read runtime fields from TS config, such as `localeDir`, `keyMode`, `idPrefix`, and `idLength`.
+
 For Next.js 16 or Turbopack builds, prepare an explicit extract script:
 
 ```json
 {
   "scripts": {
-    "i18n:extract": "literal-i18n-extract",
-    "i18n:watch": "literal-i18n-extract --watch",
+    "i18n:extract": "literal-i18n extract",
+    "i18n:watch": "literal-i18n extract --watch",
     "build": "npm run i18n:extract && next build"
   }
 }
@@ -148,6 +175,8 @@ const nextConfig: NextConfig = {};
 
 export default withLiteralI18n(nextConfig, literalI18nConfig);
 ```
+
+If you use `literal-i18n.config.ts`, change the import to `import literalI18nConfig from './literal-i18n.config.ts'`.
 
 This maintains:
 
@@ -191,19 +220,21 @@ next build --webpack
 Default usage:
 
 ```bash
-literal-i18n-extract
+literal-i18n extract
 ```
+
+The old `literal-i18n-extract` command is still available and behaves the same as `literal-i18n extract`.
 
 Specify a config file:
 
 ```bash
-literal-i18n-extract --config ./configs/i18n.mjs
+literal-i18n extract --config ./configs/i18n.mjs
 ```
 
 Override config with CLI flags:
 
 ```bash
-literal-i18n-extract src \
+literal-i18n extract src \
   --out src/messages/en.json \
   --source-map-out src/messages/source-map.json \
   --key-mode hash \
@@ -222,14 +253,14 @@ CLI flags > NEXT_PUBLIC_LITERAL_I18N_* env vars > literal-i18n.config.* > defaul
 Watch mode:
 
 ```bash
-literal-i18n-extract --watch
+literal-i18n extract --watch
 ```
 
 Use `--watch` when you are not using the Next plugin, or when you set `devWatch: false` and want the CLI to own development extraction. By default, `withLiteralI18n` uses the internal watcher in development; explicit `next dev --webpack` uses webpack watch.
 
 ## Configure I18nProvider
 
-In App Router, prefer `getI18nProviderProps(locale)` in the locale layout. It reads `literal-i18n.config.*` and loads the current locale JSON, `source-map.json`, `keyMode`, `idPrefix`, and `idLength` for you:
+In App Router, prefer `getI18nProviderProps(locale)` in the locale layout. It reads `literal-i18n.config.*` and loads the current locale JSON, `keyMode`, `idPrefix`, and `idLength` through the server-side MessageStore. JSON files are cached by `mtime/size` and invalidated automatically, so multiple imports do not repeatedly parse the same files.
 
 ```tsx
 import { I18nProvider } from 'literal-i18n';
@@ -246,6 +277,35 @@ export default async function LocaleLayout({ children, params }) {
   );
 }
 ```
+
+By default, `getI18nProviderProps(locale)` no longer sends the full `source-map.json` to the client. Hash mode can compute keys from source text and `id`, so client-side source maps are usually unnecessary. Enable it explicitly if you need it:
+
+```ts
+const i18n = await getI18nProviderProps(locale, {
+  includeSourceMap: true,
+});
+```
+
+To automatically prune messages by the current route, add middleware. The middleware only writes the pathname into a request header; it does not read JSON:
+
+```ts
+// src/middleware.ts
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
+import { literalI18nMiddleware } from 'literal-i18n/middleware';
+
+export function middleware(request: NextRequest) {
+  return literalI18nMiddleware(request, NextResponse);
+}
+
+export const config = {
+  matcher: ['/((?!_next|favicon.ico).*)'],
+};
+```
+
+Next.js 16 recommends the `proxy.ts` file convention. You can reuse the same helper and rename the exported function to `proxy`.
+
+The Next plugin/CLI generates `src/messages/manifest.json` automatically. When the middleware header and manifest are both available, `getI18nProviderProps(locale)` returns route-pruned messages for the current pathname. If middleware is missing, the manifest is missing, the route does not match, or the manifest is invalid, it falls back to the full messages object.
 
 Messages are flat JSON:
 
@@ -670,7 +730,7 @@ With `id`, source-map keys look like `source_id`:
 
 Source mode usually does not need `sourceMapOutput`, because the key is already the source text.
 
-Server helpers also use `source-map.json` as a runtime lookup aid. For example, `getLocaleTranslator(locale)` first tries the direct key; if that misses, it uses source-map to resolve source text to the hash key, then reads the translated value from the current locale JSON.
+Server translator helpers also use `source-map.json` as a runtime lookup aid. For example, `getLocaleTranslator(locale)` first tries the direct key; if that misses, it uses source-map to resolve source text to the hash key, then reads the translated value from the current locale JSON. `getI18nProviderProps(locale)` does not send the full source map to the client by default.
 
 ## API Reference
 
@@ -690,7 +750,9 @@ Server helpers also use `source-map.json` as a runtime lookup aid. For example, 
 
 - `loadMessages(locale, localeDir?)`
 - `loadSourceMap(localeDir?)`
+- `loadLiteralI18nManifest(localeDir?)`
 - `loadLiteralI18nConfig(cwd?)`
+- `getMessageStore(localeDir?)`
 - `getI18nProviderProps(locale, options?)`
 - `getTranslator(input?)`
 - `getLocaleTranslator(locale, options?)`
@@ -698,8 +760,16 @@ Server helpers also use `source-map.json` as a runtime lookup aid. For example, 
 Common `getI18nProviderProps` / `getTranslator` / `getLocaleTranslator` options:
 
 - `localeDir`: message directory, default `src/messages`
-- `sourceMap`: pass a source-map manually; when omitted, `${localeDir}/source-map.json` is loaded automatically
-- `keyMode` / `idPrefix` / `idLength`: optional. In hash mode, you usually do not need to pass them because server helpers resolve through source-map.
+- `sourceMap`: pass a source-map manually; `getTranslator` / `getLocaleTranslator` load `${localeDir}/source-map.json` automatically when omitted
+- `includeSourceMap`: only for `getI18nProviderProps`, default `false`; set it to `true` to send the full source map to the client
+- `optimizePayload`: only for `getI18nProviderProps`, default `true`; set it to `false` to skip pathname + manifest pruning
+- `pathname`: only for `getI18nProviderProps`; usually provided by `literalI18nMiddleware`, and useful for tests
+- `keyMode` / `idPrefix` / `idLength`: optional. In hash mode, server helpers usually read them from config.
+
+### `literal-i18n/middleware`
+
+- `literalI18nMiddleware(request, NextResponse)`
+- `LITERAL_I18N_PATHNAME_HEADER`
 
 ### `literal-i18n/next`
 
@@ -712,6 +782,7 @@ Common options:
 - `sourceDir` / `sourceDirs`
 - `sourceOutput`
 - `sourceMapOutput`
+- `manifestOutput`: defaults to `${localeDir}/manifest.json`; set it to `false` to disable runtime pruning manifest output
 - `localeDir`
 - `locales`
 - `sourceLocale`
@@ -729,7 +800,7 @@ Common options:
 `devWatch` controls automatic extraction in development:
 
 - `true`: force the internal watcher in development. Startup and source changes are scanned, webpack watch extraction is skipped, and each change is extracted once.
-- `false`: do not extract automatically in development. Run the CLI manually, or use `literal-i18n-extract --watch`.
+- `false`: do not extract automatically in development. Run the CLI manually, or use `literal-i18n extract --watch`.
 - Unset: development defaults to the internal watcher; explicit `next dev --webpack` uses webpack watch.
 
 ### `literal-i18n/local-translate-api`

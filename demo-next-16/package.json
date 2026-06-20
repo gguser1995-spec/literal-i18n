@@ -11,7 +11,7 @@
     "next": "^16.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "literal-i18n": "^0.1.8"
+    "literal-i18n": "file:.."
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

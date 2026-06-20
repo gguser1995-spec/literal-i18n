@@ -8,6 +8,7 @@ export interface LiteralI18nPluginOptions extends MessageIdOptions {
   sourceDirs?: string | string[];
   sourceOutput?: string;
   sourceMapOutput?: string;
+  manifestOutput?: string | false;
   localeDir?: string;
   importSource?: string | string[];
   importSources?: string | string[];

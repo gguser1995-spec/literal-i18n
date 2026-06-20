@@ -2,8 +2,6 @@
 
 import { createRequire } from 'node:module';
 import { existsSync, readFileSync, statSync, watch } from 'node:fs';
-import { mkdir, writeFile } from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -133,25 +131,33 @@ function resolveConfigPath(cwd, configPath) {
 
 async function loadTypeScriptConfig(configPath) {
   const ts = require('typescript');
+  const Module = require('node:module').Module;
   const source = readFileSync(configPath, 'utf8');
   const transpiled = ts.transpileModule(source, {
     compilerOptions: {
-      module: ts.ModuleKind.ESNext,
+      module: ts.ModuleKind.CommonJS,
       target: ts.ScriptTarget.ES2020,
       esModuleInterop: true,
-      moduleResolution: ts.ModuleResolutionKind.NodeNext,
+      moduleResolution: ts.ModuleResolutionKind.NodeJs,
     },
     fileName: configPath,
   }).outputText;
-  const tempDir = path.join(os.tmpdir(), 'literal-i18n-config');
-  const tempPath = path.join(
-    tempDir,
-    `${path.basename(configPath).replace(/[^a-zA-Z0-9_.-]/g, '_')}.${Date.now()}.mjs`,
-  );
+  const configModule = new Module(configPath);
+  configModule.filename = configPath;
+  configModule.paths = [
+    ...Module._nodeModulePaths(path.dirname(configPath)),
+    ...Module._nodeModulePaths(process.cwd()),
+  ];
+  const moduleRequire = configModule.require.bind(configModule);
+  configModule.require = (specifier) => {
+    if (specifier.startsWith('literal-i18n/')) {
+      return require(specifier);
+    }
 
-  await mkdir(tempDir, { recursive: true });
-  await writeFile(tempPath, transpiled, 'utf8');
-  return import(pathToFileURL(tempPath).href);
+    return moduleRequire(specifier);
+  };
+  configModule._compile(transpiled, configPath);
+  return configModule.exports;
 }
 
 async function loadConfig(cwd, configPath) {

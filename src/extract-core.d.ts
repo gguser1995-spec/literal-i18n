@@ -10,6 +10,12 @@ export interface ExtractRecord {
   column: number;
 }
 
+export interface ExtractFileResult {
+  records: ExtractRecord[];
+  warnings: ExtractWarning[];
+  imports: string[];
+}
+
 export interface ExtractWarning {
   message: string;
   file: string;
@@ -23,6 +29,7 @@ export interface LiteralI18nExtractorOptions extends MessageIdOptions {
   sourceDirs?: string | string[];
   sourceOutput?: string;
   sourceMapOutput?: string;
+  manifestOutput?: string | false;
   localeDir?: string;
   importSource?: string | string[];
   importSources?: string | string[];
@@ -49,9 +56,21 @@ export interface ExtractResult {
   sourceMessages: Record<string, string>;
   sourceMap: Record<string, string>;
   sourceMeta: Record<string, { text: string; id?: string }>;
+  manifest: {
+    version: number;
+    files: Record<string, {
+      keys: string[];
+      route?: {
+        pattern: string;
+        kind: string;
+      };
+    }>;
+    routes: Record<string, string[]>;
+  };
   records: ExtractRecord[];
   sourceChanged: boolean;
   sourceMapChanged: boolean;
+  manifestChanged: boolean;
   localeResults: Array<{
     locale: string;
     outputPath: string;
@@ -82,4 +101,9 @@ export declare function extractFromSource(
   filePath: string,
   sourceText: string,
   options?: LiteralI18nExtractorOptions,
-): { records: ExtractRecord[]; warnings: ExtractWarning[] };
+): ExtractFileResult;
+
+export declare function buildRuntimeManifest(
+  recordsByFile: Record<string, { records: ExtractRecord[]; imports?: string[] }>,
+  options?: LiteralI18nExtractorOptions,
+): ExtractResult['manifest'];

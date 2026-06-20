@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "files": {
+    "src/app/[locale]/client-demo.tsx": {
+      "keys": [
+        "Hello {name}",
+        "Items count: {count}",
+        "Language"
+      ]
+    },
+    "src/app/[locale]/page.tsx": {
+      "keys": [
+        "Hello World",
+        "Hello {name}",
+        "Items count: {count}",
+        "Language",
+        "This is a server component",
+        "Welcome to Literal I18n Demo"
+      ],
+      "route": {
+        "pattern": "/[locale]",
+        "kind": "page"
+      }
+    }
+  },
+  "routes": {
+    "/[locale]": [
+      "Hello World",
+      "Hello {name}",
+      "Items count: {count}",
+      "Language",
+      "This is a server component",
+      "Welcome to Literal I18n Demo"
+    ]
+  }
+}

@@ -14,7 +14,6 @@ export default async function HomePage() {
       <section>
         <h2><T text="This is a server component" /></h2>
       </section>
-
       <hr />
 
       <section>

@@ -6,6 +6,7 @@ const DEFAULT_IMPORT_SOURCES = ['literal-i18n'];
 const DEFAULT_SERVER_IMPORT_SOURCES = ['literal-i18n/server'];
 const DEFAULT_SOURCE_DIR = 'src';
 const DEFAULT_SOURCE_OUTPUT = 'src/messages/en.json';
+const DEFAULT_MANIFEST_FILE = 'manifest.json';
 const DEFAULT_ID_PREFIX = 'm_';
 const DEFAULT_ID_LENGTH = 16;
 const SUPPORTED_EXTENSIONS = new Set(['.js', '.jsx', '.ts', '.tsx']);
@@ -127,6 +128,9 @@ function normalizeOptions(options = {}) {
     ? path.resolve(cwd, options.sourceMapOutput)
     : undefined;
   const localeDir = path.resolve(cwd, options.localeDir || 'src/messages');
+  const manifestOutput = options.manifestOutput === false
+    ? undefined
+    : path.resolve(cwd, options.manifestOutput || path.join(localeDir, DEFAULT_MANIFEST_FILE));
   const importSources = uniq(toArray(options.importSource || options.importSources || DEFAULT_IMPORT_SOURCES));
   const serverImportSources = uniq(
     toArray(options.serverImportSource || options.serverImportSources || DEFAULT_SERVER_IMPORT_SOURCES),
@@ -143,6 +147,7 @@ function normalizeOptions(options = {}) {
     sourceDirs,
     sourceOutput,
     sourceMapOutput,
+    manifestOutput,
     localeDir,
     importSources,
     serverImportSources,
@@ -329,6 +334,48 @@ function getObjectBindingIdentifier(bindingElement) {
   return undefined;
 }
 
+function resolveRelativeImport(fromFile, specifier, options = {}) {
+  if (typeof specifier !== 'string') return undefined;
+  if (!specifier.startsWith('.')) return undefined;
+
+  const basePath = normalizePath(path.join(path.dirname(fromFile), specifier));
+  const extension = path.extname(basePath);
+  if (SUPPORTED_EXTENSIONS.has(extension)) return basePath;
+
+  const candidates = [];
+  for (const supportedExtension of SUPPORTED_EXTENSIONS) {
+    candidates.push(`${basePath}${supportedExtension}`);
+  }
+
+  for (const supportedExtension of SUPPORTED_EXTENSIONS) {
+    candidates.push(normalizePath(path.join(basePath, `index${supportedExtension}`)));
+  }
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(path.resolve(options.cwd || process.cwd(), candidate))) {
+      return candidate;
+    }
+  }
+
+  return candidates[0];
+}
+
+function collectRelativeImports(sourceFile, filePath, options = {}) {
+  const imports = [];
+
+  for (const statement of sourceFile.statements) {
+    const moduleSpecifier = ts.isImportDeclaration(statement) || ts.isExportDeclaration(statement)
+      ? statement.moduleSpecifier
+      : undefined;
+    if (!moduleSpecifier || !ts.isStringLiteral(moduleSpecifier)) continue;
+
+    const resolvedImport = resolveRelativeImport(filePath, moduleSpecifier.text, options);
+    if (resolvedImport) imports.push(resolvedImport);
+  }
+
+  return uniq(imports);
+}
+
 function extractFromSource(filePath, sourceText, options = {}) {
   const importSources = options.importSources || DEFAULT_IMPORT_SOURCES;
   const serverImportSources = options.serverImportSources || DEFAULT_SERVER_IMPORT_SOURCES;
@@ -343,6 +390,7 @@ function extractFromSource(filePath, sourceText, options = {}) {
   const runtimeTranslators = new Set();
   const records = [];
   const warnings = [];
+  const localImports = collectRelativeImports(sourceFile, filePath, options);
 
   function addRecord(text, node, kind, id) {
     records.push({
@@ -428,7 +476,7 @@ function extractFromSource(filePath, sourceText, options = {}) {
   }
 
   visit(sourceFile);
-  return { records, warnings };
+  return { records, warnings, imports: localImports };
 }
 
 function toSourceMap(records, options = {}) {
@@ -470,6 +518,93 @@ function flattenRecordsByFile(recordsByFile) {
   return Object.values(recordsByFile).flatMap((entry) => entry.records || []);
 }
 
+function sortKeys(keys) {
+  return Array.from(new Set(keys)).sort();
+}
+
+function getNextAppRouteInfo(filePath) {
+  const normalizedPath = normalizePath(filePath);
+  const extension = path.extname(normalizedPath);
+  if (!SUPPORTED_EXTENSIONS.has(extension)) return undefined;
+
+  const withoutExtension = normalizedPath.slice(0, -extension.length);
+  const parts = withoutExtension.split('/');
+  const appIndex = parts.lastIndexOf('app');
+  if (appIndex < 0) return undefined;
+
+  const kind = parts[parts.length - 1];
+  const routeFileKinds = new Set([
+    'page',
+    'layout',
+    'template',
+    'loading',
+    'error',
+    'global-error',
+    'not-found',
+    'default',
+  ]);
+  if (!routeFileKinds.has(kind)) return undefined;
+
+  const routeSegments = parts.slice(appIndex + 1, -1).filter((segment) => {
+    if (!segment) return false;
+    if (segment.startsWith('(') && segment.endsWith(')')) return false;
+    if (segment.startsWith('@')) return false;
+    return true;
+  });
+  const pattern = routeSegments.length > 0 ? `/${routeSegments.join('/')}` : '/';
+
+  return { pattern, kind };
+}
+
+function buildRuntimeManifest(recordsByFile, options = {}) {
+  const files = {};
+  const routes = {};
+  const directKeysByFile = new Map();
+  const importsByFile = new Map();
+
+  for (const [filePath, entry] of Object.entries(recordsByFile)) {
+    const records = entry.records || [];
+    directKeysByFile.set(
+      filePath,
+      sortKeys(records.map((record) => getMessageKey(record.text, { ...options, id: record.id }))),
+    );
+    importsByFile.set(filePath, Array.isArray(entry.imports) ? entry.imports : []);
+  }
+
+  const collectKeysForFile = (filePath, seen = new Set()) => {
+    if (seen.has(filePath)) return [];
+    seen.add(filePath);
+
+    const keys = [...(directKeysByFile.get(filePath) || [])];
+    for (const importedFile of importsByFile.get(filePath) || []) {
+      keys.push(...collectKeysForFile(importedFile, seen));
+    }
+
+    return sortKeys(keys);
+  };
+
+  for (const [filePath, entry] of Object.entries(recordsByFile)) {
+    const route = getNextAppRouteInfo(filePath);
+    const keys = route ? collectKeysForFile(filePath) : directKeysByFile.get(filePath) || [];
+    if (keys.length === 0) continue;
+
+    files[filePath] = {
+      keys,
+      ...(route ? { route } : {}),
+    };
+
+    if (route && route.kind !== 'layout') {
+      routes[route.pattern] = sortKeys([...(routes[route.pattern] || []), ...keys]);
+    }
+  }
+
+  return {
+    version: 1,
+    files,
+    routes,
+  };
+}
+
 class LiteralI18nExtractor {
   constructor(options = {}) {
     this.options = normalizeOptions(options);
@@ -509,7 +644,7 @@ class LiteralI18nExtractor {
     for (const file of files) {
       const relativePath = normalizePath(path.relative(this.options.cwd, file));
       const result = this.extractFile(file);
-      cache.files[relativePath] = { records: result.records };
+      cache.files[relativePath] = { records: result.records, imports: result.imports };
       warnings.push(...result.warnings);
     }
 
@@ -547,7 +682,7 @@ class LiteralI18nExtractor {
       }
 
       const result = this.extractFile(file);
-      cache.files[relativePath] = { records: result.records };
+      cache.files[relativePath] = { records: result.records, imports: result.imports };
       warnings.push(...result.warnings);
       changedFiles.push(file);
     }
@@ -563,9 +698,13 @@ class LiteralI18nExtractor {
   async writeOutputs(cache, meta) {
     const records = flattenRecordsByFile(cache.files);
     const { sourceMessages, sourceMap, sourceMeta } = buildSourceArtifacts(records, this.options);
+    const manifest = buildRuntimeManifest(cache.files, this.options);
     const sourceChanged = writeJsonIfChanged(this.options.sourceOutput, sourceMessages);
     const sourceMapChanged = this.options.sourceMapOutput
       ? writeJsonIfChanged(this.options.sourceMapOutput, sourceMap)
+      : false;
+    const manifestChanged = this.options.manifestOutput
+      ? writeJsonIfChanged(this.options.manifestOutput, manifest)
       : false;
     const localeResults = await this.writeLocaleOutputs(sourceMessages, sourceMeta);
     const result = {
@@ -573,9 +712,11 @@ class LiteralI18nExtractor {
       sourceMessages,
       sourceMap,
       sourceMeta,
+      manifest,
       records,
       sourceChanged,
       sourceMapChanged,
+      manifestChanged,
       localeResults,
       count: Object.keys(sourceMessages).length,
     };
@@ -731,7 +872,7 @@ class LiteralI18nExtractor {
       );
     }
 
-    const changedLabel = result.sourceChanged || result.sourceMapChanged ? 'updated' : 'unchanged';
+    const changedLabel = result.sourceChanged || result.sourceMapChanged || result.manifestChanged ? 'updated' : 'unchanged';
     console.log(`[literal-i18n] ${result.reason}: ${changedLabel}, ${result.count} messages.`);
 
     for (const localeResult of result.localeResults || []) {
@@ -752,6 +893,7 @@ module.exports = {
   LiteralI18nExtractor,
   SourceI18nExtractor: LiteralI18nExtractor,
   buildSourceArtifacts,
+  buildRuntimeManifest,
   collectFiles,
   createMessageId,
   extractFromSource,

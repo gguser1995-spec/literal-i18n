@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "files": {
+    "src/app/[locale]/client-demo.tsx": {
+      "keys": [
+        "m_2a8995faed7333b6",
+        "m_34931f286b66d0d4",
+        "m_8c0ae2a9ea241b89"
+      ]
+    },
+    "src/app/[locale]/page.tsx": {
+      "keys": [
+        "m_0436f27cccf7979f",
+        "m_073083b5b1d08690",
+        "m_274197ab2818e8c4",
+        "m_2a8995faed7333b6",
+        "m_34931f286b66d0d4",
+        "m_8c0ae2a9ea241b89",
+        "m_c17a84d426eee4e1",
+        "m_f00293ce918bba28"
+      ],
+      "route": {
+        "pattern": "/[locale]",
+        "kind": "page"
+      }
+    }
+  },
+  "routes": {
+    "/[locale]": [
+      "m_0436f27cccf7979f",
+      "m_073083b5b1d08690",
+      "m_274197ab2818e8c4",
+      "m_2a8995faed7333b6",
+      "m_34931f286b66d0d4",
+      "m_8c0ae2a9ea241b89",
+      "m_c17a84d426eee4e1",
+      "m_f00293ce918bba28"
+    ]
+  }
+}
