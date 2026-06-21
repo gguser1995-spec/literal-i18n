@@ -1,98 +1,147 @@
 # Literal I18n
 
-[中文](README.md) | [English](README.en.md)  |  [GitHub](https://github.com/gguser1995-spec/literal-i18n) | [Gitee](https://gitee.com/lwfux/literal-i18n)
+[中文](README.md) | [English](README.en.md) | [GitHub](https://github.com/gguser1995-spec/literal-i18n) | [Gitee](https://gitee.com/lwfux/literal-i18n)
 
-Literal I18n is a React / Next.js i18n library that uses literal source text as the translation source.
+Literal I18n is a literal-string driven i18n toolkit for React and Next.js. You write real source copy in components, and the package handles AST extraction, stable key generation, locale JSON updates, and route-aware runtime message loading.
 
-Instead of maintaining keys such as `home.title`, you write the UI text directly:
+Current version: `0.2.0`
+
+## Design Philosophy
+
+Traditional i18n usually starts with naming keys such as `home.hero.title`, then moving the real copy into locale files. Literal I18n flips that workflow: developers write real copy first, the extractor reads those literals from source code, and the generated artifacts stay explicit and reviewable.
+
+The goal is simple:
+
+- Reduce development friction: write `<T text="Hello {name}" />` instead of inventing a key first.
+- Keep production artifacts deterministic: locale JSON, source maps, and manifests are plain files.
+- Let translation management move out of the code-editing loop through the local GUI.
+
+For production projects, `hash` key mode is recommended. It keeps readable source text in code while using stable short keys in JSON files.
+
+## Compared With Traditional i18n
+
+| Area | Traditional i18n | Literal I18n |
+| --- | --- | --- |
+| Development entry | Name keys first, then call `t('home.title')` | Write `<T text="Home" />` or `tr('Home')` |
+| Key management | Manual naming and folder conventions | AST-generated keys with `source` / `hash` modes |
+| Missing translations | Usually runtime/build fallback or errors | Detected during extraction and can be translated by hooks |
+| Repeated source text | Manually split keys | Use `id` to separate translation context |
+| Runtime payload | Often loads the whole locale file | Can prune messages per page through middleware/proxy + manifest |
+| Translation management | External platform or manual JSON edits | Built-in local GUI for filtering, clearing, retranslating, and deleting AST-unused entries |
+| Setup cost | Requires a key taxonomy | `npx literal-i18n init --yes` first |
+
+Literal I18n is not trying to replace every large translation management system. It is for teams that want translation workflows to stay inside the repository while keeping the developer experience light.
+
+## Development Examples
+
+Use source copy directly in components:
 
 ```tsx
 import { T } from 'literal-i18n';
 
-<T text="Hello {name}" name={user.name} />
+export function UserLine({ name }: { name: string }) {
+  return <T text="Hello {name}" name={name} />;
+}
 ```
 
-The extractor scans static source text from your code, writes JSON files, and fills target locales through your own async translation hook.
+Get translated strings inside Client Components:
+
+```tsx
+'use client';
+
+import { useTranslate } from 'literal-i18n';
+
+export function SaveButton() {
+  const { tr } = useTranslate();
+
+  return <button>{tr('Save')}</button>;
+}
+```
+
+Use translations on the server:
+
+```ts
+import { getLocaleTranslator } from 'literal-i18n/server';
+
+export async function getTitle(locale: string) {
+  const { tr } = await getLocaleTranslator(locale);
+
+  return tr('Dashboard');
+}
+```
+
+For Next.js App Router, inject the provider in the locale layout:
+
+```tsx
+import { I18nProvider } from 'literal-i18n';
+import { getI18nProviderProps } from 'literal-i18n/server';
+
+export default async function LocaleLayout({
+  children,
+  params,
+}: {
+  children: React.ReactNode;
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale } = await params;
+  const i18n = await getI18nProviderProps(locale);
+
+  return <I18nProvider {...i18n}>{children}</I18nProvider>;
+}
+```
+
+Use `id` when the same source text needs different translations:
+
+```tsx
+<T text="Post" id="button" />
+<T text="Post" id="noun" />
+```
+
+## GIF Preview
 
 ![Demo](docs/output.gif)
 
-## Before You Start
+The GIF shows the basic development flow from source literals to generated translation files. In real projects, pair it with `literal-i18n gui` for translation management and runtime manifests for page-level payload control.
 
-Decide these items first:
+## Installation, CLI First
 
-- Source locale: for example `en`
-- Target locales: for example `zh`, `de`, `ja`
-- Message output directory: for example `src/messages`
-- Key mode: `source` or `hash`
-- Translation implementation: your own `translateJsonHook`, or one of the optional OpenAI-compatible helpers
-
-For production projects, hash keys are recommended. Put these values in `literal-i18n.config.mjs`; if your runtime also reads them from env, mirror them in `.env`:
-
-```env
-NEXT_PUBLIC_LITERAL_I18N_KEY_MODE=hash
-NEXT_PUBLIC_LITERAL_I18N_ID_PREFIX=m_
-NEXT_PUBLIC_LITERAL_I18N_ID_LENGTH=16
-```
-
-## Install
-
-```bash
-npm install literal-i18n
-```
-
-## Initialize Automatically
-
-For new projects, run this command to apply the setup:
+For new projects, start with the init command:
 
 ```bash
 npx literal-i18n init --yes
 ```
 
-To preview the planned changes first, run `npx literal-i18n init --dry-run`. Note: `npx literal-i18n init` without `--yes` only prints the plan and does not write files.
+Preview planned changes without writing files:
 
-When the package is installed as a project dependency, for example `"literal-i18n": "file:/Users/lwf/web3/literal-i18n"`, the bare `literal-i18n init` command is usually not available in your global shell PATH. Use `npx literal-i18n init --yes`, `npm exec literal-i18n -- init --yes`, or call `literal-i18n ...` from `package.json` scripts.
+```bash
+npx literal-i18n init --dry-run
+```
 
-`init` detects the current project and conservatively creates or updates:
+Note: `npx literal-i18n init` without `--yes` only prints the plan and does not write files. The docs intentionally prefer `npx literal-i18n init --yes` to avoid a silent setup.
+
+If you want to install the dependency first:
+
+```bash
+npm install literal-i18n
+npx literal-i18n init --yes
+```
+
+With a project dependency, the bare `literal-i18n init` command is usually not available in the global shell PATH. Use `npx literal-i18n init --yes`, `npm exec literal-i18n -- init --yes`, or call it from `package.json` scripts.
+
+`init` conservatively detects and creates or updates:
 
 - `literal-i18n.config.ts`
 - `src/messages/`
 - `.env.example`
-- `package.json` scripts for `i18n:extract` / `i18n:watch`
+- `package.json` scripts: `i18n:extract`, `i18n:watch`, and `build`
 - `src/middleware.ts` for Next.js 15, or `src/proxy.ts` for Next.js 16
-- simple `next.config.ts/mjs/js` files by wrapping them with `withLiteralI18n(...)`
+- simple `next.config.ts/mjs/js` wrapping with `withLiteralI18n(...)`
 
-The generated `literal-i18n.config.ts` includes a DeepSeek `translateJsonHook` by default. When `LITERAL_I18N_API_KEY` is missing from `.env` / `.env.local`, it safely returns an empty result and only extracts messages; after you add the key, missing target locales are translated automatically.
+If the project already has `next.config`, `middleware`, or `proxy`, init does not blindly overwrite them. Simple configs are merged automatically; complex files get manual merge guidance. Re-running init does not insert duplicate blocks.
 
-If the project already has `next.config`, `middleware`, or `proxy`, `init` does not blindly overwrite them. Simple `next.config` files are wrapped automatically; complex config files or existing middleware/proxy files receive a manual merge suggestion. Running `init` repeatedly does not duplicate setup.
+The generated config includes a default DeepSeek `translateJsonHook`. Without `LITERAL_I18N_API_KEY`, it extracts only and does not auto-translate. Once the key is present, missing target translations can be translated automatically.
 
-### Try the Demo
-
-Two demo projects are included:
-
-```bash
-# Next.js 15 (demo/)
-cd demo
-npm install
-# Edit .env and insert your own DeepSeek API Key
-# Get one at: https://platform.deepseek.com/api_keys
-npm run dev
-
-# Next.js 16 (demo-next-16/)
-cd demo-next-16
-npm install
-# Same — configure your own DeepSeek API Key first
-npm run dev
-```
-
-> ⚠️ The demo uses DeepSeek API for translation. **Use your own API Key**, not the placeholder in `.env`.
-
-> 💡 **Dev experience**: AST extraction and translation file generation run automatically in development.
-> With Next.js 16 / Turbopack, you may need to **manually refresh the page** after translation files change to see the latest text.
-
-If you do not use `init`, create a shared config file manually. Both the Next plugin and the CLI can use it:
-
-```js
-// literal-i18n.config.mjs
+```ts
 import { defineLiteralI18nConfig } from 'literal-i18n/next';
 import { createDeepSeekTranslateJsonHook } from 'literal-i18n/local-translate-api';
 
@@ -106,135 +155,84 @@ export default defineLiteralI18nConfig({
   keyMode: 'hash',
   idPrefix: 'm_',
   idLength: 16,
-  translateJsonHook(input) {
-    // Optional example from the package — get your own DeepSeek API key and replace the function:
+  async translateJsonHook(input) {
     const apiKey = process.env.LITERAL_I18N_API_KEY;
     if (!apiKey) return {};
-    const hook = createDeepSeekTranslateJsonHook({
+
+    return createDeepSeekTranslateJsonHook({
       baseUrl: 'https://api.deepseek.com',
       apiKey,
       model: 'deepseek-v4-flash',
       batchSize: 20,
       timeoutMs: 120000,
       temperature: 0.1,
-      prompt: `
-      You are a professional music-website UI localizer.
-      When terms are ambiguous, prefer music-website conventions.
-      Keep translations concise and natural.
-      Preserve all placeholders unchanged.
-      Example: hello {name}=>你好 {name}`,
-    });
-    return hook(input);
+      prompt: 'Translate concise UI copy. Keep placeholders unchanged.',
+    })(input);
   },
 });
 ```
 
-The CLI automatically reads `literal-i18n.config.mjs`, `.js`, `.cjs`, `.ts`, or `.json` from your project root.
+## GUI Translation Management
 
-`literal-i18n.config.ts` is loaded through the built-in TypeScript transpile path, so it can contain `defineLiteralI18nConfig(...)`, `translateJsonHook`, and other extractor/plugin options. App Router runtime helpers also read runtime fields from TS config, such as `localeDir`, `keyMode`, `idPrefix`, and `idLength`.
+Start the local translation manager:
 
-For Next.js 16 or Turbopack builds, prepare an explicit extract script:
-
-```json
-{
-  "scripts": {
-    "i18n:extract": "literal-i18n extract",
-    "i18n:watch": "literal-i18n extract --watch",
-    "build": "npm run i18n:extract && next build"
-  }
-}
+```bash
+npx literal-i18n gui
 ```
 
-`i18n:extract` is not required in every project:
-
-- With `withLiteralI18n`, development starts the internal watcher by default. It scans once on project startup and incrementally scans source changes.
-- With explicit `next dev --webpack`, extraction defaults back to the webpack watch hook; set `devWatch: true` if you still want startup extraction.
-- With Next.js 16 / Turbopack dev, `withLiteralI18n` starts the internal dev watcher automatically.
-- With Next.js 16 / Turbopack build, run `i18n:extract` before `next build`.
-- Without the Next plugin, or outside Next.js, use the CLI manually.
-
-If you do not want the Next plugin to extract automatically during development, disable dev watch:
-
-```ts
-export default withLiteralI18n(nextConfig, {
-  ...literalI18nConfig,
-  devWatch: false,
-});
-```
-
-`devWatch: true` forces the internal watcher in both Next.js 15 and Next.js 16 development. It scans once on startup, scans changed source files once per update, and skips webpack watch extraction to avoid duplicate scans.
-
-## Configure next.config.ts
-
-```ts
-import type { NextConfig } from 'next';
-import withLiteralI18n from 'literal-i18n/next';
-import literalI18nConfig from './literal-i18n.config.mjs';
-
-const nextConfig: NextConfig = {};
-
-export default withLiteralI18n(nextConfig, literalI18nConfig);
-```
-
-If you use `literal-i18n.config.ts`, change the import to `import literalI18nConfig from './literal-i18n.config.ts'`.
-
-This maintains:
+Default URL:
 
 ```txt
-src/messages/en.json
-src/messages/zh.json
-src/messages/de.json
-src/messages/source-map.json
+http://127.0.0.1:3699
 ```
 
-If you use multiple Next plugins, compose them:
-
-```ts
-export default withOtherPlugin(
-  withLiteralI18n(nextConfig, literalI18nConfig),
-);
-```
-
-### Next.js 16 and Turbopack
-
-When `withLiteralI18n` detects Next.js 16 and no `turbopack` config, it adds an empty `turbopack: {}` to avoid the "webpack config without turbopack config" error.
-
-Development starts an independent dev watcher by default for initial extraction and incremental updates. This lets AST extraction run on project startup, even before Next.js compiles a page because of the first browser request.
-
-If you explicitly run `next dev --webpack`, the internal watcher is disabled by default and extraction is handled by the webpack hook. Set `devWatch: true` when you want startup extraction even in explicit webpack dev mode.
-
-For Turbopack build, still run the CLI before `next build`:
+Custom port:
 
 ```bash
-npm run i18n:extract && next build
+npx literal-i18n gui --port 3700
 ```
 
-If you want webpack hooks for build-time extraction:
+The GUI is for translation management rather than development setup. It reads the current project's `literal-i18n.config.*`, locale JSON files, `source-map.json`, `manifest.json`, and AST cache.
+
+Current capabilities:
+
+- Filter by page URL, source snippet, locale, key, and literal language.
+- View readonly `source-map.json`.
+- View and edit target locale JSON files such as `zh.json` or `de.json`.
+- Clear a translation without deleting its key.
+- Retranslate a single key.
+- Show key:value entries that are no longer in the AST.
+- Delete AST-unused entries.
+- Prune extra key:value entries across source map and locale JSON files.
+
+Deletion has strict boundaries: only keys missing from the latest AST scan can be deleted, and the server revalidates the AST cache before writing. If the AST cache is missing, deletion is disabled.
+
+This direction is designed for a practical workflow: developers keep source copy and structure in code, while translators or reviewers can manage translations through a local link.
+
+## More Details
+
+### CLI Extraction
 
 ```bash
-next build --webpack
+npx literal-i18n extract
 ```
 
-## CLI Extraction
-
-Default usage:
+The legacy command remains available:
 
 ```bash
-literal-i18n extract
+npx literal-i18n-extract
 ```
-
-The old `literal-i18n-extract` command is still available and behaves the same as `literal-i18n extract`.
 
 Specify a config file:
 
 ```bash
-literal-i18n extract --config ./configs/i18n.mjs
+npx literal-i18n extract --config ./literal-i18n.config.ts
 ```
 
-Override config with CLI flags:
+Override options from the command line:
 
 ```bash
-literal-i18n extract src \
+npx literal-i18n extract src \
   --out src/messages/en.json \
   --source-map-out src/messages/source-map.json \
   --key-mode hash \
@@ -244,7 +242,7 @@ literal-i18n extract src \
   --source-locale en
 ```
 
-Priority:
+Configuration priority:
 
 ```txt
 CLI flags > NEXT_PUBLIC_LITERAL_I18N_* env vars > literal-i18n.config.* > defaults
@@ -253,48 +251,31 @@ CLI flags > NEXT_PUBLIC_LITERAL_I18N_* env vars > literal-i18n.config.* > defaul
 Watch mode:
 
 ```bash
-literal-i18n extract --watch
+npx literal-i18n extract --watch
 ```
 
-Use `--watch` when you are not using the Next plugin, or when you set `devWatch: false` and want the CLI to own development extraction. By default, `withLiteralI18n` uses the internal watcher in development; explicit `next dev --webpack` uses webpack watch.
+When `withLiteralI18n` is used, development mode starts the internal watcher by default. It scans once on startup and again on source changes. With explicit `next dev --webpack`, extraction uses the webpack watch hook by default; set `devWatch: true` if startup scanning is still required.
 
-## Configure I18nProvider
-
-In App Router, prefer `getI18nProviderProps(locale)` in the locale layout. It reads `literal-i18n.config.*` and loads the current locale JSON, `keyMode`, `idPrefix`, and `idLength` through the server-side MessageStore. JSON files are cached by `mtime/size` and invalidated automatically, so multiple imports do not repeatedly parse the same files.
-
-```tsx
-import { I18nProvider } from 'literal-i18n';
-import { getI18nProviderProps } from 'literal-i18n/server';
-
-export default async function LocaleLayout({ children, params }) {
-  const { locale } = await params;
-  const i18n = await getI18nProviderProps(locale);
-
-  return (
-    <I18nProvider {...i18n}>
-      {children}
-    </I18nProvider>
-  );
-}
-```
-
-By default, `getI18nProviderProps(locale)` no longer sends the full `source-map.json` to the client. Hash mode can compute keys from source text and `id`, so client-side source maps are usually unnecessary. Enable it explicitly if you need it:
+### Next.js Plugin
 
 ```ts
-const i18n = await getI18nProviderProps(locale, {
-  includeSourceMap: true,
-});
+import type { NextConfig } from 'next';
+import withLiteralI18n from 'literal-i18n/next';
+import literalI18nConfig from './literal-i18n.config';
+
+const nextConfig: NextConfig = {};
+
+export default withLiteralI18n(nextConfig, literalI18nConfig);
 ```
 
-To automatically prune messages by the current route, add middleware. The middleware only writes the pathname into a request header; it does not read JSON:
+Next.js 16 should use `src/proxy.ts`:
 
 ```ts
-// src/middleware.ts
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { literalI18nMiddleware } from 'literal-i18n/middleware';
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   return literalI18nMiddleware(request, NextResponse);
 }
 
@@ -303,284 +284,132 @@ export const config = {
 };
 ```
 
-Next.js 16 recommends the `proxy.ts` file convention. You can reuse the same helper and rename the exported function to `proxy`.
+Next.js 15 uses `src/middleware.ts`; the body is the same, but the exported function is usually named `middleware`:
 
-The Next plugin/CLI generates `src/messages/manifest.json` automatically. When the middleware header and manifest are both available, `getI18nProviderProps(locale)` returns route-pruned messages for the current pathname. If middleware is missing, the manifest is missing, the route does not match, or the manifest is invalid, it falls back to the full messages object.
+```ts
+export function middleware(request: NextRequest) {
+  return literalI18nMiddleware(request, NextResponse);
+}
+```
 
-Messages are flat JSON:
+The middleware/proxy only forwards the current pathname through a request header. It does not read JSON or translate. Message pruning happens inside `getI18nProviderProps(locale)`.
+
+### Route-Aware Runtime Pruning
+
+Extraction generates `src/messages/manifest.json`, which records App Router routes and the message keys used by each route.
+
+`getI18nProviderProps(locale)` returns only the messages needed by the current page when:
+
+- `manifest.json` exists.
+- `literalI18nMiddleware` is installed.
+- The current pathname matches a manifest route.
+
+Missing middleware, missing manifest, unmatched routes, or invalid manifest data fall back to full messages. This fallback keeps pages working, but acceptance tests should inspect the actual HTML/RSC payload to ensure pruning is active.
+
+Tests can pass pathname manually:
+
+```ts
+const i18n = await getI18nProviderProps('zh', {
+  pathname: '/zh/about',
+});
+```
+
+The full `source-map.json` is not sent to the client by default. Opt in explicitly if needed:
+
+```ts
+const i18n = await getI18nProviderProps('zh', {
+  includeSourceMap: true,
+});
+```
+
+### Hash Key Mode
+
+The default `source` mode uses source text as keys:
 
 ```json
 {
-  "m_073083b5b1d08690": "Hello world"
+  "Hello World": "你好世界"
 }
 ```
 
-`loadMessages` accepts a custom locale directory as the second argument:
+Production projects should usually use `hash`:
 
-```ts
-const messages = await loadMessages(locale, 'locales');
-```
-
-If you use `loadMessages` manually with hash mode, also pass the key settings from config into `I18nProvider`. `getI18nProviderProps` is preferred because it avoids duplicating config.
-
-If your locale comes from route params such as `/en` or `/zh`, each locale normally maps to a separate route and works well with SSG/SSR.
-
-If your locale comes from cookies, headers, middleware, or proxy and should vary per request, force dynamic rendering:
-
-```ts
-import { headers } from 'next/headers';
-
-export default async function LocaleLayout({ children }) {
-  await headers(); // force dynamic when locale depends on request state
-
-  return children;
+```json
+{
+  "m_073083b5b1d08690": "你好世界"
 }
 ```
 
-Otherwise, Next may statically embed messages read at build time.
+`source-map.json` records the source-to-key relationship:
 
-## Component Usage
-
-```tsx
-import { T } from 'literal-i18n';
-
-<T text="Hello World" />
-<T text="Hello {name}" name={user.name} />
-```
-
-Except for `text`, `id`, and `params`, all other props passed to `<T />` are interpolation params:
-
-```tsx
-<T text="my name is {name}" name="wang huahua" />
-```
-
-Equivalent to:
-
-```tsx
-<T
-  text="my name is {name}"
-  params={{ name: 'wang huahua' }}
-/>
-```
-
-`<T />` supports ReactNode interpolation:
-
-```tsx
-<T
-  text="my name is {name}"
-  name={<span className="text-red-500">Tom</span>}
-/>
-```
-
-In Next.js App Router, if you pass ReactNode interpolation such as `<span />`, put that usage inside a client component:
-
-```tsx
-'use client';
-
-import { T } from 'literal-i18n';
-
-export function NameLine() {
-  return (
-    <T
-      text="my name is {name}"
-      name={<span className="text-red-500">Tom</span>}
-    />
-  );
+```json
+{
+  "Hello World": "m_073083b5b1d08690"
 }
 ```
 
-In Server Components, prefer plain string/number params. Passing ReactNode from a Server Component to a Client Component prop can cross a serialization boundary and cause hydration issues.
-
-## Client Component Strings
-
-Use `useTranslate()` when you need a string in a client component:
-
-```tsx
-'use client';
-
-import { useTranslate } from 'literal-i18n';
-
-export function Title() {
-  const { tr } = useTranslate();
-
-  return <h1>{tr('I am a test')}</h1>;
-}
-```
-
-Aliasing is supported and extractable:
-
-```tsx
-const { tr: t } = useTranslate();
-
-t('Client text');
-```
-
-## Next.js Server Usage
-
-When you already have a route locale:
-
-```ts
-import { getLocaleTranslator } from 'literal-i18n/server';
-
-const { tr } = await getLocaleTranslator(locale);
-
-tr('Hello {name}', { name: user.name });
-```
-
-`getLocaleTranslator(locale)` reads `src/messages/{locale}.json` and `src/messages/source-map.json` by default. In hash mode, you can still call `tr` with source text directly; you do not need to pass `keyMode`, `idPrefix`, or `idLength` again:
-
-```ts
-const { tr } = await getLocaleTranslator('zh');
-
-tr('Server rendered text');
-```
-
-If your message directory is not `src/messages`, pass `localeDir`:
-
-```ts
-const { tr } = await getLocaleTranslator(locale, {
-  localeDir: 'app/messages',
-});
-```
-
-To infer locale from the Next request header:
-
-```ts
-import { getTranslator } from 'literal-i18n/server';
-
-const { tr } = await getTranslator();
-
-tr('Server rendered text');
-```
-
-`getTranslator()` also loads `source-map.json` automatically so source text can resolve to hash keys.
-
-## Non-Component Usage
-
-Do not depend on global state outside components. Create an explicit translator:
-
-```ts
-import { createTranslator } from 'literal-i18n';
-
-const t = createTranslator({
-  locale,
-  messages,
-  keyMode: 'hash',
-});
-
-t('Hello {name}', { name: 'Tom' });
-```
-
-## Use id to Disambiguate Context
-
-The same source text can need different translations. For example, `Post` may mean a verb or a noun. Use `id` to separate contexts:
+The same source text with different `id` values produces different keys:
 
 ```tsx
 <T text="Post" id="button" />
 <T text="Post" id="noun" />
 ```
 
-```ts
-const { tr } = useTranslate();
+### AST Extraction Rules
 
-tr('Post', undefined, { id: 'button' });
-tr('Post', undefined, { id: 'noun' });
-```
-
-Source mode produces:
-
-```json
-{
-  "Post_button": "Publish",
-  "Post_noun": "Post"
-}
-```
-
-Hash mode includes `text + id` in the hash input:
-
-```json
-{
-  "m_xxxx": "Publish",
-  "m_yyyy": "Post"
-}
-```
-
-`id` is only for translation context. It is not an interpolation param. To interpolate `{id}`, use `params`:
-
-```tsx
-<T text="ID is {id}" params={{ id: userId }} />
-```
-
-## AST Extraction Rules
-
-By default, only APIs imported from these modules are recognized:
+Recognized imports by default:
 
 ```ts
 import { T, useTranslate, createTranslator } from 'literal-i18n';
 import { getTranslator, getLocaleTranslator } from 'literal-i18n/server';
 ```
 
-Supported:
+Static literals are supported:
 
 ```tsx
 <T text="Hello World" />
 <T text="Post" id="button" />
-<T text="Hello {name}" name={user.name} />
-```
 
-```tsx
 const { tr } = useTranslate();
 tr('Client text');
 tr('Post', undefined, { id: 'button' });
 ```
 
-```ts
-const { tr: t } = await getLocaleTranslator(locale);
-t('Server text');
-```
-
-```ts
-const t = createTranslator({ locale, messages });
-t('Dictionary text');
-```
-
-Unsupported dynamic text or dynamic id:
+Dynamic source text or dynamic ids are not supported:
 
 ```tsx
 <T text={title} />
 <T text={`Hello ${name}`} />
 <T text="Post" id={type} />
-tr(variable)
-tr(getTitle())
-tr('Post', undefined, { id: type })
+tr(variable);
+tr('Post', undefined, { id: type });
 ```
 
-These patterns emit warnings during extraction.
+These patterns produce extraction warnings. The extractor must know the real source text at AST time to generate stable translation artifacts.
 
-If you wrap your own entry point:
+Configure custom import sources when wrapping the API:
 
 ```ts
-withLiteralI18n(nextConfig, {
+export default withLiteralI18n(nextConfig, {
   importSources: ['literal-i18n', '@/components/i18n'],
 });
 ```
 
-## Translation Hooks
+### Translation Hooks
 
-Async translation should happen during extraction / JSON generation. Runtime rendering only reads JSON synchronously.
-
-Implement your own `translateJsonHook` or `translateHook` to connect terminology, cache, retries, review, and logs.
-
-### `translateJsonHook`
-
-Recommended for batch translation:
+Batch translation is recommended:
 
 ```ts
-withLiteralI18n(nextConfig, {
+export default withLiteralI18n(nextConfig, {
   locales: ['zh'],
   sourceLocale: 'en',
-  async translateJsonHook({ locale, sourceLocale, missingTexts, missingMessages }) {
-    return await myTranslateBatch({
+  async translateJsonHook({
+    locale,
+    sourceLocale,
+    missingTexts,
+    missingMessages,
+  }) {
+    return myTranslateBatch({
       locale,
       sourceLocale,
       texts: missingTexts,
@@ -590,147 +419,49 @@ withLiteralI18n(nextConfig, {
 });
 ```
 
-Return:
+Return type:
 
 ```ts
-Record<string, string> | undefined
+Record<string, string>
 ```
 
-Keys can be source text or generated message keys. For repeated source text with different `id`, returning generated message keys is recommended to avoid context collisions.
+Returned keys can be source text or generated message keys. For repeated source text with different `id` values, returning generated message keys is safer.
 
-Input shape:
-
-```ts
-type TranslateJsonHookInput = {
-  locale: string;
-  sourceLocale: string;
-  missingTexts: string[];
-  missingMessages?: Array<{
-    key: string;
-    text: string;
-    id?: string;
-  }>;
-  sourceMessages?: Record<string, string>;
-  existingMessages?: Record<string, unknown>;
-};
-```
-
-Returning `{}` or `undefined` keeps source text for missing entries, so they can be filled later.
-
-### `translateHook`
-
-For one-by-one translation:
+Single-message translation is also supported:
 
 ```ts
-withLiteralI18n(nextConfig, {
+export default withLiteralI18n(nextConfig, {
   async translateHook({ text, key, id, locale, sourceLocale }) {
-    return await myTranslateOne({ text, key, id, locale, sourceLocale });
+    return myTranslateOne({ text, key, id, locale, sourceLocale });
   },
 });
 ```
 
-Return:
+`treatSourceAsMissing` defaults to `false`. A target translation that equals the source text is not treated as missing by default, which matters for Latin-script languages where identical text can be correct.
 
-```ts
-string | undefined
+### Demos
+
+Two demos are included:
+
+```bash
+cd demo
+npm install
+npm run dev
 ```
 
-Input shape:
-
-```ts
-type TranslateTextHookInput = {
-  text: string;
-  key?: string;
-  id?: string;
-  locale: string;
-  sourceLocale: string;
-};
+```bash
+cd demo-next-16
+npm install
+npm run dev
 ```
 
-Returning a string writes it to the target locale JSON. Returning `undefined` keeps the source text.
+The demos require your own DeepSeek API key for auto-translation:
 
-## Optional Translation Helpers
-
-The package provides a few optional helpers for existing services. You are encouraged to write your own translation function when your product needs custom terminology, review, or caching.
-
-> **⚠️ Note**: `createOpenAICompatibleTranslateJsonHook` is exported but has not been thoroughly tested yet. It is recommended to use `createDeepSeekTranslateJsonHook` for now (it uses the same OpenAI-compatible API under the hood and is verified to work).
-
-```ts
-import { createOpenAICompatibleTranslateJsonHook } from 'literal-i18n/local-translate-api';
-
-const translateJsonHook = createOpenAICompatibleTranslateJsonHook({
-  baseUrl: process.env.TRANSLATE_API_BASE_URL!,
-  apiKey: process.env.TRANSLATE_API_KEY!,
-  model: process.env.TRANSLATE_MODEL!,
-  prompt: 'Translate concise UI copy.',
-});
+```env
+LITERAL_I18N_API_KEY=your-api-key
 ```
 
-If you wrap a helper, pass the input through:
-
-```ts
-const deepseekHook = createOpenAICompatibleTranslateJsonHook({
-  baseUrl: process.env.TRANSLATE_API_BASE_URL!,
-  apiKey: process.env.TRANSLATE_API_KEY!,
-  model: process.env.TRANSLATE_MODEL!,
-});
-
-withLiteralI18n(nextConfig, {
-  async translateJsonHook(input) {
-    return deepseekHook(input);
-  },
-});
-```
-
-```ts
-import { createLocalTranslateJsonHook } from 'literal-i18n/local-translate-api';
-
-const translateJsonHook = createLocalTranslateJsonHook({
-  endpoint: process.env.TRANSLATE_API_ENDPOINT!,
-  prompt: 'Translate concise UI copy.',
-});
-```
-
-The docs do not assume a specific local service or model. You can use DeepSeek, any OpenAI-compatible API, your own service, or a fully custom implementation.
-
-> **💡 Recommendation**: When using DeepSeek, set the model to `deepseek-v4-flash` for the best balance of translation quality and response speed. `deepseek-chat` may be less efficient than `deepseek-v4-flash` for translating many short text fragments.
-
-## Hash Key Mode
-
-Source mode uses source text directly as the key:
-
-```json
-{
-  "Hello World": "Hello world"
-}
-```
-
-Hash mode:
-
-```json
-{
-  "m_073083b5b1d08690": "Hello world"
-}
-```
-
-`sourceMapOutput` is optional. In hash mode, it writes `source text -> hash key` for debugging:
-
-```ts
-sourceMapOutput: 'src/messages/source-map.json'
-```
-
-With `id`, source-map keys look like `source_id`:
-
-```json
-{
-  "Post_button": "m_xxxx",
-  "Post_noun": "m_yyyy"
-}
-```
-
-Source mode usually does not need `sourceMapOutput`, because the key is already the source text.
-
-Server translator helpers also use `source-map.json` as a runtime lookup aid. For example, `getLocaleTranslator(locale)` first tries the direct key; if that misses, it uses source-map to resolve source text to the hash key, then reads the translated value from the current locale JSON. `getI18nProviderProps(locale)` does not send the full source map to the client by default.
+In Next.js 16 / Turbopack, translation file updates may require a manual page refresh.
 
 ## API Reference
 
@@ -757,14 +488,14 @@ Server translator helpers also use `source-map.json` as a runtime lookup aid. Fo
 - `getTranslator(input?)`
 - `getLocaleTranslator(locale, options?)`
 
-Common `getI18nProviderProps` / `getTranslator` / `getLocaleTranslator` options:
+Common options for `getI18nProviderProps` / `getTranslator` / `getLocaleTranslator`:
 
-- `localeDir`: message directory, default `src/messages`
-- `sourceMap`: pass a source-map manually; `getTranslator` / `getLocaleTranslator` load `${localeDir}/source-map.json` automatically when omitted
-- `includeSourceMap`: only for `getI18nProviderProps`, default `false`; set it to `true` to send the full source map to the client
-- `optimizePayload`: only for `getI18nProviderProps`, default `true`; set it to `false` to skip pathname + manifest pruning
-- `pathname`: only for `getI18nProviderProps`; usually provided by `literalI18nMiddleware`, and useful for tests
-- `keyMode` / `idPrefix` / `idLength`: optional. In hash mode, server helpers usually read them from config.
+- `localeDir`: message directory, default `src/messages`.
+- `sourceMap`: manually provided source map.
+- `includeSourceMap`: only for `getI18nProviderProps`, default `false`.
+- `optimizePayload`: only for `getI18nProviderProps`, default `true`.
+- `pathname`: only for `getI18nProviderProps`, normally provided by middleware/proxy.
+- `keyMode` / `idPrefix` / `idLength`: hash key options, usually loaded from config.
 
 ### `literal-i18n/middleware`
 
@@ -782,7 +513,7 @@ Common options:
 - `sourceDir` / `sourceDirs`
 - `sourceOutput`
 - `sourceMapOutput`
-- `manifestOutput`: defaults to `${localeDir}/manifest.json`; set it to `false` to disable runtime pruning manifest output
+- `manifestOutput`
 - `localeDir`
 - `locales`
 - `sourceLocale`
@@ -792,16 +523,16 @@ Common options:
 - `translateJsonHook`
 - `onExtract`
 - `keepStale`
-- `treatSourceAsMissing`: defaults to `false`. Set it to `true` to treat target values that equal the source text as missing translations. When a target locale has no valid translation, the extractor does not write a source-text placeholder; runtime rendering falls back to the source text.
+- `treatSourceAsMissing`
 - `pruneLegacySourceKeys`
 - `progress` / `silent`
 - `devWatch`
 
-`devWatch` controls automatic extraction in development:
+`devWatch`:
 
-- `true`: force the internal watcher in development. Startup and source changes are scanned, webpack watch extraction is skipped, and each change is extracted once.
-- `false`: do not extract automatically in development. Run the CLI manually, or use `literal-i18n extract --watch`.
-- Unset: development defaults to the internal watcher; explicit `next dev --webpack` uses webpack watch.
+- `true`: force the internal development watcher.
+- `false`: disable automatic development extraction; run CLI or `extract --watch` manually.
+- unset: internal watcher by default; explicit `next dev --webpack` uses webpack watch.
 
 ### `literal-i18n/local-translate-api`
 
@@ -809,18 +540,31 @@ Common options:
 - `createOpenAICompatibleTranslateJsonHook(options)`
 - `createDeepSeekTranslateJsonHook(options)`
 
----
+These helpers are optional. You can use DeepSeek, any OpenAI-compatible API, your own service, or a fully custom translation hook.
 
-## 📝 Changelog
+## Changelog
 
-See [CHANGELOG.md](CHANGELOG.md)
+See [CHANGELOG.md](CHANGELOG.md).
 
----
+Highlights in `0.2.0`:
 
-## ❓ Need Help?
+- Rewritten documentation with a product-oriented structure.
+- CLI init positioned as the recommended setup entry.
+- GUI translation management documented as a core workflow.
+- Runtime message caching and page-level pruning explained clearly.
+- Next.js 16 `proxy.ts` and Turbopack behavior documented more explicitly.
 
-If you encounter a bug, have a feature request, or have questions about configuration or usage, please open an issue on GitHub:
+## Questions And Issues
 
-**👉 https://github.com/gguser1995-spec/literal-i18n/issues**
+Please submit bugs, feature requests, or usage questions through GitHub Issues:
 
-💡 **Please file an Issue first.**
+https://github.com/gguser1995-spec/literal-i18n/issues
+
+Helpful issue details:
+
+- `literal-i18n` version.
+- Next.js / React versions.
+- `literal-i18n.config.*`.
+- Related page path.
+- Relevant snippets from locale JSON, `source-map.json`, and `manifest.json`.
+- For payload issues, include the message keys that appear in the actual HTML/RSC payload.

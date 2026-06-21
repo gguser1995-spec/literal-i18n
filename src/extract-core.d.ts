@@ -107,3 +107,12 @@ export declare function buildRuntimeManifest(
   recordsByFile: Record<string, { records: ExtractRecord[]; imports?: string[] }>,
   options?: LiteralI18nExtractorOptions,
 ): ExtractResult['manifest'];
+
+export declare function buildSourceArtifacts(
+  records: ExtractRecord[],
+  options?: LiteralI18nExtractorOptions,
+): Pick<ExtractResult, 'sourceMessages' | 'sourceMap' | 'sourceMeta'>;
+
+export declare function flattenRecordsByFile(
+  recordsByFile: Record<string, { records?: ExtractRecord[] }>,
+): ExtractRecord[];

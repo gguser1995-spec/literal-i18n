@@ -897,6 +897,7 @@ module.exports = {
   collectFiles,
   createMessageId,
   extractFromSource,
+  flattenRecordsByFile,
   getMessageKey,
   normalizeOptions,
   toSourceMap,

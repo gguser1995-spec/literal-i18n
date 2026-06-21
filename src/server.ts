@@ -300,10 +300,9 @@ function pickMessages(messages: TranslationMessages, keys: Set<string>): Transla
 
 async function getHeaderValue(name: string): Promise<string | undefined> {
   try {
-    const importNextHeaders = new Function('return import("next/headers")') as () => Promise<{
+    const nextHeaders = await import('next/headers') as {
       headers?: () => Promise<{ get(name: string): string | null }> | { get(name: string): string | null };
-    }>;
-    const nextHeaders = await importNextHeaders();
+    };
     const getHeaders = nextHeaders.headers as
       | undefined
       | (() => Promise<{ get(name: string): string | null }> | { get(name: string): string | null });

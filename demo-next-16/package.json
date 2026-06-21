@@ -4,8 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "extract": "literal-i18n-extract",
-    "build": "npm run extract && next build"
+    "i18n:extract": "literal-i18n extract",
+    "i18n:watch": "literal-i18n extract --watch",
+    "extract": "npm run i18n:extract",
+    "build": "npm run i18n:extract && next build"
   },
   "dependencies": {
     "next": "^16.0.0",

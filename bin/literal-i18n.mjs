@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 
 import { spawn } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const require = createRequire(import.meta.url);
 const EXTRACT_BIN = path.join(__dirname, 'extract-literal-i18n.mjs');
 const CONFIG_FILES = [
   'literal-i18n.config.ts',
@@ -38,6 +40,7 @@ function parseArgs(argv) {
     '--key-mode',
     '--source-dir',
     '--config',
+    '--port',
   ]);
 
   for (let index = 0; index < rest.length; index += 1) {
@@ -86,6 +89,7 @@ function printHelp() {
 Commands:
   init       Initialize literal-i18n in the current project
   extract    Run the extractor (alias for literal-i18n-extract)
+  gui        Start the local translation manager
 
 Init options:
   --dry-run                 Print planned changes without writing files
@@ -96,11 +100,16 @@ Init options:
   --key-mode <source|hash>  Message key mode, default hash
   --source-dir <dir>        Source directory, default src when present
 
+GUI options:
+  --port <number>           Local GUI port, default 3699
+  --config <path>           Config file path. Defaults to literal-i18n.config.*
+
 Examples:
   npx literal-i18n init --yes
   npx literal-i18n init --dry-run
   npx literal-i18n init --yes --locales en,zh,de
   npx literal-i18n extract --watch
+  npx literal-i18n gui
 `);
 }
 
@@ -554,11 +563,45 @@ function runExtract(args) {
   });
 }
 
+async function runGui(options) {
+  if (options.port !== undefined) {
+    const port = Number(options.port);
+    if (!Number.isInteger(port) || port < 0 || port > 65535) {
+      throw new Error('[literal-i18n] --port must be a number between 0 and 65535.');
+    }
+  }
+
+  const { startGuiServer } = require('../src/gui-server.cjs');
+  const result = await startGuiServer({
+    cwd: process.cwd(),
+    configPath: options.config,
+    port: options.port,
+  });
+  console.log(`[literal-i18n] gui ready: ${result.url}`);
+
+  await new Promise((resolve) => {
+    const close = () => {
+      result.server.close(() => resolve());
+    };
+    process.once('SIGINT', close);
+    process.once('SIGTERM', close);
+  });
+}
+
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   if (options.command === 'extract') {
     const extractArgs = process.argv.slice(3);
     await runExtract(extractArgs);
+    return;
+  }
+
+  if (options.command === 'gui') {
+    if (options.help) {
+      printHelp();
+      return;
+    }
+    await runGui(options);
     return;
   }
 
