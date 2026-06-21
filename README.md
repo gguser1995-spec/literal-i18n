@@ -294,6 +294,36 @@ export function middleware(request: NextRequest) {
 
 middleware/proxy 只把当前 pathname 写入 request header，不读取 JSON，不做翻译。真正的消息裁剪发生在 `getI18nProviderProps(locale)` 内部。
 
+如果你的项目没有其他 middleware，直接使用 `literalI18nMiddleware(request, NextResponse)` 即可，不需要手动 import `LITERAL_I18N_PATHNAME_HEADER`。
+
+如果项目已经有 next-intl 或自定义 middleware，需要把 literal-i18n 的 pathname header 合并进同一个 request。此时 `LITERAL_I18N_PATHNAME_HEADER` 是必须的：
+
+```ts
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
+import createMiddleware from 'next-intl/middleware';
+import { LITERAL_I18N_PATHNAME_HEADER } from 'literal-i18n/middleware';
+
+const intlMiddleware = createMiddleware({
+  locales: ['en', 'zh'],
+  defaultLocale: 'en',
+  localePrefix: 'always',
+});
+
+export function middleware(request: NextRequest) {
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set(LITERAL_I18N_PATHNAME_HEADER, request.nextUrl.pathname);
+
+  return intlMiddleware(
+    new NextRequest(request, {
+      headers: requestHeaders,
+    }),
+  );
+}
+```
+
+如果你有 `_rsc`、静态资源白名单、rewrite 或其他提前返回分支，也要保证需要裁剪的页面请求不会绕过这个 header；否则 `getI18nProviderProps(locale)` 会因为拿不到 pathname 而回退全量 messages。
+
 ### 运行时按页面裁剪
 
 抽取时会生成 `src/messages/manifest.json`，记录 App Router 路由和该路由下使用到的 message key。

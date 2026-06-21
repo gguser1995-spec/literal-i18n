@@ -316,12 +316,17 @@ export default withLiteralI18n(existingNextConfig, literalI18nConfig);`;
 
 function createManualMiddlewarePatch(kind) {
   const fnName = kind === 'proxy' ? 'proxy' : 'middleware';
-  return `import { NextResponse } from 'next/server';
-import { literalI18nMiddleware } from 'literal-i18n/middleware';
+  return `import { NextRequest, NextResponse } from 'next/server';
+import { LITERAL_I18N_PATHNAME_HEADER } from 'literal-i18n/middleware';
 
-export function ${fnName}(request) {
-  literalI18nMiddleware(request, NextResponse);
-  return existing${fnName[0].toUpperCase()}${fnName.slice(1)}(request);
+export function ${fnName}(request: NextRequest) {
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set(LITERAL_I18N_PATHNAME_HEADER, request.nextUrl.pathname);
+  const requestWithLiteralI18nPathname = new NextRequest(request, {
+    headers: requestHeaders,
+  });
+
+  return existing${fnName[0].toUpperCase()}${fnName.slice(1)}(requestWithLiteralI18nPathname, NextResponse);
 }`;
 }
 

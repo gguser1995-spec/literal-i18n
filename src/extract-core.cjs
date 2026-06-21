@@ -334,11 +334,7 @@ function getObjectBindingIdentifier(bindingElement) {
   return undefined;
 }
 
-function resolveRelativeImport(fromFile, specifier, options = {}) {
-  if (typeof specifier !== 'string') return undefined;
-  if (!specifier.startsWith('.')) return undefined;
-
-  const basePath = normalizePath(path.join(path.dirname(fromFile), specifier));
+function resolveImportCandidate(basePath, options = {}) {
   const extension = path.extname(basePath);
   if (SUPPORTED_EXTENSIONS.has(extension)) return basePath;
 
@@ -360,6 +356,33 @@ function resolveRelativeImport(fromFile, specifier, options = {}) {
   return candidates[0];
 }
 
+function resolveLocalImport(fromFile, specifier, options = {}) {
+  if (typeof specifier !== 'string') return undefined;
+
+  if (specifier.startsWith('.')) {
+    return resolveImportCandidate(normalizePath(path.join(path.dirname(fromFile), specifier)), options);
+  }
+
+  if (specifier.startsWith('@/')) {
+    const cwd = options.cwd || process.cwd();
+    const sourceDirs = Array.isArray(options.sourceDirs) && options.sourceDirs.length > 0
+      ? options.sourceDirs
+      : [path.resolve(cwd, options.sourceDir || DEFAULT_SOURCE_DIR)];
+    const importPath = specifier.slice(2);
+
+    for (const sourceDir of sourceDirs) {
+      const sourceDirRelative = normalizePath(path.relative(cwd, sourceDir));
+      const resolved = resolveImportCandidate(normalizePath(path.join(sourceDirRelative, importPath)), options);
+      if (resolved && fs.existsSync(path.resolve(cwd, resolved))) return resolved;
+    }
+
+    const fallbackSourceDir = normalizePath(path.relative(cwd, sourceDirs[0]));
+    return resolveImportCandidate(normalizePath(path.join(fallbackSourceDir, importPath)), options);
+  }
+
+  return undefined;
+}
+
 function collectRelativeImports(sourceFile, filePath, options = {}) {
   const imports = [];
 
@@ -369,7 +392,7 @@ function collectRelativeImports(sourceFile, filePath, options = {}) {
       : undefined;
     if (!moduleSpecifier || !ts.isStringLiteral(moduleSpecifier)) continue;
 
-    const resolvedImport = resolveRelativeImport(filePath, moduleSpecifier.text, options);
+    const resolvedImport = resolveLocalImport(filePath, moduleSpecifier.text, options);
     if (resolvedImport) imports.push(resolvedImport);
   }
 

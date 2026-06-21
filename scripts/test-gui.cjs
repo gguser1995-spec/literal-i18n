@@ -5,6 +5,7 @@ const path = require('node:path');
 const {
   buildRuntimeManifest,
   buildSourceArtifacts,
+  extractFromSource,
 } = require('../src/extract-core.cjs');
 const { loadProject } = require('../src/gui/project.cjs');
 const { queryProject } = require('../src/gui/query.cjs');
@@ -104,6 +105,27 @@ function createFixture(keyMode = 'hash') {
 }
 
 async function roundOneDataCorrectness() {
+  const aliasCwd = fs.mkdtempSync(path.join(os.tmpdir(), 'literal-i18n-alias-'));
+  fs.mkdirSync(path.join(aliasCwd, 'src/components/layout'), { recursive: true });
+  fs.writeFileSync(path.join(aliasCwd, 'src/components/layout/site-header.tsx'), '');
+  const aliasResult = extractFromSource(
+    'src/app/[locale]/page.tsx',
+    `import { T } from 'literal-i18n';
+import { SiteHeader } from '@/components/layout/site-header';
+
+export default function Page() {
+  return <><SiteHeader /><T text="Page" /></>;
+}
+`,
+    {
+      cwd: aliasCwd,
+      sourceDirs: [path.join(aliasCwd, 'src')],
+      importSources: ['literal-i18n'],
+    },
+  );
+  assert.deepEqual(aliasResult.imports, ['src/components/layout/site-header.tsx']);
+  fs.rmSync(aliasCwd, { recursive: true, force: true });
+
   const hashFixture = createFixture('hash');
   const project = await loadProject({ cwd: hashFixture.cwd });
   assert.equal(project.ast.validKeys.has(hashFixture.keys.helloKey), true);

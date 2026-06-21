@@ -294,6 +294,36 @@ export function middleware(request: NextRequest) {
 
 The middleware/proxy only forwards the current pathname through a request header. It does not read JSON or translate. Message pruning happens inside `getI18nProviderProps(locale)`.
 
+If your project has no other middleware, use `literalI18nMiddleware(request, NextResponse)` directly. You do not need to import `LITERAL_I18N_PATHNAME_HEADER` manually.
+
+If the project already has next-intl or custom middleware, merge literal-i18n's pathname header into the same request. In this case, `LITERAL_I18N_PATHNAME_HEADER` is required:
+
+```ts
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
+import createMiddleware from 'next-intl/middleware';
+import { LITERAL_I18N_PATHNAME_HEADER } from 'literal-i18n/middleware';
+
+const intlMiddleware = createMiddleware({
+  locales: ['en', 'zh'],
+  defaultLocale: 'en',
+  localePrefix: 'always',
+});
+
+export function middleware(request: NextRequest) {
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set(LITERAL_I18N_PATHNAME_HEADER, request.nextUrl.pathname);
+
+  return intlMiddleware(
+    new NextRequest(request, {
+      headers: requestHeaders,
+    }),
+  );
+}
+```
+
+If you have `_rsc`, static asset allowlists, rewrites, or any early-return branch, make sure page requests that need pruning do not bypass this header. Otherwise `getI18nProviderProps(locale)` cannot read pathname and will fall back to full messages.
+
 ### Route-Aware Runtime Pruning
 
 Extraction generates `src/messages/manifest.json`, which records App Router routes and the message keys used by each route.

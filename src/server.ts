@@ -1,6 +1,5 @@
 import path from 'node:path';
-import { readFile, stat } from 'node:fs/promises';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { createTranslator, type TranslateHook, type TranslationMessages } from './translator';
@@ -113,7 +112,7 @@ export async function loadLiteralI18nConfig(cwd = process.cwd()): Promise<Litera
 
   try {
     if (configPath.endsWith('.json')) {
-      return normalizeConfigOptions(JSON.parse(await readFile(configPath, 'utf8')));
+      return normalizeConfigOptions(JSON.parse(readFileSync(configPath, 'utf8')));
     }
 
     const configModule = configPath.endsWith('.ts')
@@ -372,17 +371,17 @@ export class MessageStore {
     this.localeDir = resolveLocaleDir(localeDir);
   }
 
-  private async readJson<T extends TranslationMessages | LiteralI18nManifest>(
+  private readJson<T extends TranslationMessages | LiteralI18nManifest>(
     filePath: string,
     fallback: T,
-  ): Promise<T> {
+  ): T {
     try {
-      const fileStat = await stat(filePath);
+      const fileStat = statSync(filePath);
       const signature = `${fileStat.mtimeMs}:${fileStat.size}`;
       const cached = this.jsonCache.get(filePath);
       if (cached?.signature === signature) return cached.value as T;
 
-      const content = await readFile(filePath, 'utf8');
+      const content = readFileSync(filePath, 'utf8');
       const value = JSON.parse(content) as T;
       this.jsonCache.set(filePath, { signature, value });
       return value;
@@ -392,15 +391,15 @@ export class MessageStore {
   }
 
   loadMessages(locale: string): Promise<TranslationMessages> {
-    return this.readJson(path.join(this.localeDir, `${locale}.json`), {});
+    return Promise.resolve(this.readJson(path.join(this.localeDir, `${locale}.json`), {}));
   }
 
   loadSourceMap(): Promise<TranslationMessages> {
-    return this.readJson(path.join(this.localeDir, 'source-map.json'), {});
+    return Promise.resolve(this.readJson(path.join(this.localeDir, 'source-map.json'), {}));
   }
 
   loadManifest(): Promise<LiteralI18nManifest> {
-    return this.readJson(path.join(this.localeDir, DEFAULT_MANIFEST_FILE), {});
+    return Promise.resolve(this.readJson(path.join(this.localeDir, DEFAULT_MANIFEST_FILE), {}));
   }
 
   async loadMessagesForPathname(locale: string, pathname?: string | null): Promise<TranslationMessages> {
