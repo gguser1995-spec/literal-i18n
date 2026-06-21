@@ -32,6 +32,7 @@ export interface ServerTranslatorOptions extends MessageIdOptions {
 export interface I18nProviderRuntimeOptions extends ServerTranslatorOptions {
   includeSourceMap?: boolean;
   optimizePayload?: boolean;
+  payloadScope?: 'navigation' | 'route';
   pathname?: string | null;
 }
 
@@ -294,7 +295,34 @@ function inferMessageIdOptions(input: {
   return {};
 }
 
-function selectManifestKeys(manifest: LiteralI18nManifest, pathname: string): Set<string> {
+type PayloadScope = NonNullable<I18nProviderRuntimeOptions['payloadScope']>;
+
+function routeSharesNavigationScope(pattern: string, pathname: string, locale?: string): boolean {
+  const patternSegments = splitRouteSegments(pattern);
+  const pathnameSegments = splitRouteSegments(pathname);
+  const pathnameRoot = pathnameSegments[0];
+  const patternRoot = patternSegments[0];
+
+  if (!patternRoot) return true;
+  if (!pathnameRoot) return routePatternMatches(pattern, pathname) || routePatternPrefixesPathname(pattern, pathname);
+
+  if (locale && pathnameRoot === locale) {
+    return patternRoot === locale || isDynamicSegment(patternRoot);
+  }
+
+  if (segmentMatches(patternRoot, pathnameRoot)) return true;
+
+  // Non-locale apps usually mount the provider in the root layout. In that shape
+  // the safe client-navigation scope is the full manifest rather than one page.
+  return !locale || pathnameRoot !== locale;
+}
+
+function selectManifestKeys(
+  manifest: LiteralI18nManifest,
+  pathname: string,
+  payloadScope: PayloadScope = 'navigation',
+  locale?: string,
+): Set<string> {
   const keys = new Set<string>();
   const routeEntries = Object.entries(manifest.routes ?? {});
   let hasRouteMatch = false;
@@ -316,7 +344,10 @@ function selectManifestKeys(manifest: LiteralI18nManifest, pathname: string): Se
   if (!hasRouteMatch) return keys;
 
   for (const [pattern, routeKeys] of routeEntries) {
-    if (Array.isArray(routeKeys) && routePatternMatches(pattern, pathname)) {
+    const shouldInclude = payloadScope === 'navigation'
+      ? routeSharesNavigationScope(pattern, pathname, locale)
+      : routePatternMatches(pattern, pathname);
+    if (Array.isArray(routeKeys) && shouldInclude) {
       for (const key of routeKeys) keys.add(key);
     }
   }
@@ -326,7 +357,9 @@ function selectManifestKeys(manifest: LiteralI18nManifest, pathname: string): Se
     const route = file.route;
     if (!route) continue;
 
-    const shouldInclude = route.kind === 'layout'
+    const shouldInclude = payloadScope === 'navigation'
+      ? routeSharesNavigationScope(route.pattern, pathname, locale)
+      : route.kind === 'layout'
         ? routePatternPrefixesPathname(route.pattern, pathname)
         : routePatternMatches(route.pattern, pathname);
 
@@ -402,13 +435,17 @@ export class MessageStore {
     return Promise.resolve(this.readJson(path.join(this.localeDir, DEFAULT_MANIFEST_FILE), {}));
   }
 
-  async loadMessagesForPathname(locale: string, pathname?: string | null): Promise<TranslationMessages> {
+  async loadMessagesForPathname(
+    locale: string,
+    pathname?: string | null,
+    payloadScope: PayloadScope = 'navigation',
+  ): Promise<TranslationMessages> {
     const messages = await this.loadMessages(locale);
     const normalizedPathname = normalizePathname(pathname);
     if (!normalizedPathname) return messages;
 
     const manifest = await this.loadManifest();
-    const keys = selectManifestKeys(manifest, normalizedPathname);
+    const keys = selectManifestKeys(manifest, normalizedPathname, payloadScope, locale);
     if (keys.size === 0) return messages;
 
     const picked = pickMessages(messages, keys);
@@ -507,9 +544,10 @@ export async function getI18nProviderProps(
   const runtimeOptions = mergeRuntimeOptions(config, options);
   const store = getMessageStore(runtimeOptions.localeDir);
   const pathname = options.pathname ?? await getRequestPathnameFromHeaders();
+  const payloadScope = runtimeOptions.payloadScope ?? 'navigation';
   const messages = runtimeOptions.optimizePayload === false
     ? await store.loadMessages(locale)
-    : await store.loadMessagesForPathname(locale, pathname);
+    : await store.loadMessagesForPathname(locale, pathname, payloadScope);
   const sourceMap = runtimeOptions.includeSourceMap === true || options.sourceMap !== undefined
     ? runtimeOptions.sourceMap ?? await store.loadSourceMap()
     : undefined;

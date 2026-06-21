@@ -1,6 +1,6 @@
 {
   "name": "literal-i18n",
-  "version": "0.2.1",
+  "version": "0.2.3",
   "description": "Literal-string driven i18n for React and Next.js with AST extraction, hash keys, and pluggable translation hooks.",
   "keywords": [
     "i18n",
@@ -72,7 +72,9 @@
     "build": "tsup src/index.ts src/server.ts src/middleware.ts --format esm --dts --external react --external react/jsx-runtime --external next --clean && node scripts/preserve-use-client.cjs",
     "check": "tsc --noEmit",
     "extract": "node bin/extract-literal-i18n.mjs src --out messages/en.json --source-map-out messages/source-map.json",
-    "test:gui": "node scripts/test-gui.cjs"
+    "test": "npm run check && npm run build && npm run test:runtime && npm run test:gui",
+    "test:gui": "node scripts/test-gui.cjs",
+    "test:runtime": "node scripts/test-runtime.cjs"
   },
   "dependencies": {
     "typescript": "^5.0.0"

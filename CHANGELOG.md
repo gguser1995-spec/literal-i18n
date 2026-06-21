@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.2.3 (2026-06-22)
+
+### Fixed
+
+- Fixed App Router client navigation with persistent locale layouts. `getI18nProviderProps(locale)` now defaults to a navigation-safe payload scope, so navigating from `/zh` to `/zh/create` keeps page-specific translations available instead of falling back to source text.
+
+### Added
+
+- Added `payloadScope: "route"` for advanced usage that wants the previous strict current-route payload behavior and can guarantee the provider is remounted or refreshed per route.
+- Added runtime regression coverage for navigation-safe provider payloads across same-locale client routes.
+
+## 0.2.2 (2026-06-22)
+
+### Added
+
+- Added `npm test` as the required automated regression suite, running type checks, build, runtime contract tests, and GUI tests.
+- Added runtime tests covering prop-based `tr(...)` extraction, `@/` alias route manifest dependencies, and hash-mode provider contracts.
+
+### Fixed
+
+- Fixed AST extraction for component props named `tr`, so placeholders and labels translated through a parent-provided translator are included in source messages and route manifests.
+- Fixed `@/` alias import resolution against configured source directories, ensuring shared components such as headers are included in route-level runtime payloads.
+
 ## 0.2.1 (2026-06-21)
 
 ### Fixed
@@ -8,8 +31,6 @@
 - Hash-mode clients can resolve translations from hashed message keys without requiring `includeSourceMap: true` as a workaround.
 - `getI18nProviderProps` now infers hash message id options from `source-map.json` or hashed message keys when runtime config and generated message artifacts disagree.
 - Runtime JSON reads now avoid async raw file-content promises, preventing Next.js dev/RSC payloads from pushing extra pretty-printed locale, manifest, or source-map JSON chunks into `view-source`.
-- The extractor now resolves `@/` imports against configured source directories, so route manifests include translations from aliased component dependencies such as shared headers.
-
 ## 0.2.0 (2026-06-21)
 
 ### Added

@@ -2,9 +2,9 @@
 
 [中文](README.md) | [English](README.en.md) | [GitHub](https://github.com/gguser1995-spec/literal-i18n) | [Gitee](https://gitee.com/lwfux/literal-i18n)
 
-Literal I18n is a literal-string driven i18n toolkit for React and Next.js. You write real source copy in components, and the package handles AST extraction, stable key generation, locale JSON updates, and route-aware runtime message loading.
+Literal I18n is a literal-string driven i18n toolkit for React and Next.js. You write real source copy in components, and the package handles AST extraction, stable key generation, locale JSON updates, and navigation-scoped runtime message loading.
 
-Current version: `0.2.1`
+Current version: `0.2.3`
 
 ## Design Philosophy
 
@@ -26,7 +26,7 @@ For production projects, `hash` key mode is recommended. It keeps readable sourc
 | Key management | Manual naming and folder conventions | AST-generated keys with `source` / `hash` modes |
 | Missing translations | Usually runtime/build fallback or errors | Detected during extraction and can be translated by hooks |
 | Repeated source text | Manually split keys | Use `id` to separate translation context |
-| Runtime payload | Often loads the whole locale file | Can prune messages per page through middleware/proxy + manifest |
+| Runtime payload | Often loads the whole locale file | Can prune messages by navigation scope through middleware/proxy + manifest |
 | Translation management | External platform or manual JSON edits | Built-in local GUI for filtering, clearing, retranslating, and deleting AST-unused entries |
 | Setup cost | Requires a key taxonomy | `npx literal-i18n init --yes` first |
 
@@ -101,7 +101,7 @@ Use `id` when the same source text needs different translations:
 
 ![Demo](docs/output.gif)
 
-The GIF shows the basic development flow from source literals to generated translation files. In real projects, pair it with `literal-i18n gui` for translation management and runtime manifests for page-level payload control.
+The GIF shows the basic development flow from source literals to generated translation files. In real projects, pair it with `literal-i18n gui` for translation management and runtime manifests for navigation-scoped payload control.
 
 ## Installation, CLI First
 
@@ -324,11 +324,13 @@ export function middleware(request: NextRequest) {
 
 If you have `_rsc`, static asset allowlists, rewrites, or any early-return branch, make sure page requests that need pruning do not bypass this header. Otherwise `getI18nProviderProps(locale)` cannot read pathname and will fall back to full messages.
 
-### Route-Aware Runtime Pruning
+### Navigation-Safe Runtime Pruning
 
 Extraction generates `src/messages/manifest.json`, which records App Router routes and the message keys used by each route.
 
-`getI18nProviderProps(locale)` returns only the messages needed by the current page when:
+By default, `getI18nProviderProps(locale)` returns the messages needed by the current locale navigation tree, not only the current URL's page messages. This matches persistent Next.js App Router layouts: if `I18nProvider` lives in `app/[locale]/layout.tsx`, a client navigation from `/zh` to `/zh/create` does not unmount that layout, so the provider must already hold the create page keys or the page falls back to source text.
+
+`getI18nProviderProps(locale)` prunes messages through the manifest when:
 
 - `manifest.json` exists.
 - `literalI18nMiddleware` is installed.
@@ -341,6 +343,15 @@ Tests can pass pathname manually:
 ```ts
 const i18n = await getI18nProviderProps('zh', {
   pathname: '/zh/about',
+});
+```
+
+If you can guarantee that the provider is recreated per page, or you inject a page-level provider manually, opt into strict current-route pruning:
+
+```ts
+const i18n = await getI18nProviderProps('zh', {
+  pathname: '/zh/about',
+  payloadScope: 'route',
 });
 ```
 
@@ -524,6 +535,7 @@ Common options for `getI18nProviderProps` / `getTranslator` / `getLocaleTranslat
 - `sourceMap`: manually provided source map.
 - `includeSourceMap`: only for `getI18nProviderProps`, default `false`.
 - `optimizePayload`: only for `getI18nProviderProps`, default `true`.
+- `payloadScope`: only for `getI18nProviderProps`, default `navigation`; set `route` for strict current-route pruning.
 - `pathname`: only for `getI18nProviderProps`, normally provided by middleware/proxy.
 - `keyMode` / `idPrefix` / `idLength`: hash key options, usually loaded from config.
 
@@ -576,11 +588,12 @@ These helpers are optional. You can use DeepSeek, any OpenAI-compatible API, you
 
 See [CHANGELOG.md](CHANGELOG.md).
 
-Highlights in `0.2.1`:
+Highlights in `0.2.3`:
 
-- Fixed runtime config fallback that could accidentally send `keyMode: "source"` in hash-mode projects.
-- Hash-mode projects no longer need `includeSourceMap: true` just for client-side source-to-hash lookup.
-- The `0.2.0` documentation rewrite, CLI init, GUI management, and runtime pruning work remain included.
+- Fixed source-text fallback after client navigation from `/zh` to `/zh/create` under persistent Next.js App Router locale layouts.
+- `getI18nProviderProps(locale)` now defaults to a navigation-safe payload scope for layouts that do not unmount during client navigation.
+- Added `payloadScope: 'route'` for advanced strict current-route pruning when the provider is refreshed per route.
+- The `0.2.2` prop `tr(...)` extraction, alias manifest, and automated test coverage remain included.
 
 ## Questions And Issues
 

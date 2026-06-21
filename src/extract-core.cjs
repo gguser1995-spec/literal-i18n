@@ -9,6 +9,7 @@ const DEFAULT_SOURCE_OUTPUT = 'src/messages/en.json';
 const DEFAULT_MANIFEST_FILE = 'manifest.json';
 const DEFAULT_ID_PREFIX = 'm_';
 const DEFAULT_ID_LENGTH = 16;
+const DEFAULT_TRANSLATOR_PROP_NAMES = ['tr'];
 const SUPPORTED_EXTENSIONS = new Set(['.js', '.jsx', '.ts', '.tsx']);
 
 function uniq(values) {
@@ -402,6 +403,7 @@ function collectRelativeImports(sourceFile, filePath, options = {}) {
 function extractFromSource(filePath, sourceText, options = {}) {
   const importSources = options.importSources || DEFAULT_IMPORT_SOURCES;
   const serverImportSources = options.serverImportSources || DEFAULT_SERVER_IMPORT_SOURCES;
+  const translatorPropNames = new Set(options.translatorPropNames || DEFAULT_TRANSLATOR_PROP_NAMES);
   const sourceFile = ts.createSourceFile(
     filePath,
     sourceText,
@@ -434,6 +436,20 @@ function extractFromSource(filePath, sourceText, options = {}) {
   }
 
   function visit(node) {
+    if (
+      (ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node) || ts.isArrowFunction(node)) &&
+      imports.components.size > 0
+    ) {
+      for (const parameter of node.parameters) {
+        if (!ts.isObjectBindingPattern(parameter.name)) continue;
+        for (const element of parameter.name.elements) {
+          if (ts.isIdentifier(element.name) && translatorPropNames.has(element.name.text)) {
+            runtimeTranslators.add(element.name.text);
+          }
+        }
+      }
+    }
+
     if (ts.isJsxSelfClosingElement(node) || ts.isJsxOpeningElement(node)) {
       const tagName = node.tagName.getText(sourceFile);
 

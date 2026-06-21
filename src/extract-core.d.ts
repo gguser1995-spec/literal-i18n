@@ -35,6 +35,7 @@ export interface LiteralI18nExtractorOptions extends MessageIdOptions {
   importSources?: string | string[];
   serverImportSource?: string | string[];
   serverImportSources?: string | string[];
+  translatorPropNames?: string[];
   locales?: string[];
   sourceLocale?: string;
   cacheFile?: string;
