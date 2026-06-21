@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.1 (2026-06-21)
+
+### Fixed
+
+- Fixed runtime config fallback so hash-mode projects that define `keyMode` through `NEXT_PUBLIC_LITERAL_I18N_KEY_MODE` do not accidentally send `keyMode: "source"` to `I18nProvider` when Next.js cannot dynamically import the config file.
+- Hash-mode clients can resolve translations from hashed message keys without requiring `includeSourceMap: true` as a workaround.
+- `getI18nProviderProps` now infers hash message id options from `source-map.json` or hashed message keys when runtime config and generated message artifacts disagree.
+
 ## 0.2.0 (2026-06-21)
 
 ### Added

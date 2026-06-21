@@ -4,7 +4,7 @@
 
 Literal I18n is a literal-string driven i18n toolkit for React and Next.js. You write real source copy in components, and the package handles AST extraction, stable key generation, locale JSON updates, and route-aware runtime message loading.
 
-Current version: `0.2.0`
+Current version: `0.2.1`
 
 ## Design Philosophy
 
@@ -546,13 +546,11 @@ These helpers are optional. You can use DeepSeek, any OpenAI-compatible API, you
 
 See [CHANGELOG.md](CHANGELOG.md).
 
-Highlights in `0.2.0`:
+Highlights in `0.2.1`:
 
-- Rewritten documentation with a product-oriented structure.
-- CLI init positioned as the recommended setup entry.
-- GUI translation management documented as a core workflow.
-- Runtime message caching and page-level pruning explained clearly.
-- Next.js 16 `proxy.ts` and Turbopack behavior documented more explicitly.
+- Fixed runtime config fallback that could accidentally send `keyMode: "source"` in hash-mode projects.
+- Hash-mode projects no longer need `includeSourceMap: true` just for client-side source-to-hash lookup.
+- The `0.2.0` documentation rewrite, CLI init, GUI management, and runtime pruning work remain included.
 
 ## Questions And Issues
 

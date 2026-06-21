@@ -4,7 +4,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { createTranslator, type TranslateHook, type TranslationMessages } from './translator';
-import { getEnvMessageIdOptions, type MessageIdOptions } from './id';
+import type { MessageIdOptions } from './id';
 import type { I18nProviderProps } from './context';
 
 const NEXT_INTL_LOCALE_HEADER = 'X-NEXT-INTL-LOCALE';
@@ -72,12 +72,30 @@ const messageStores = new Map<string, MessageStore>();
 const require = createRequire(import.meta.url);
 
 function normalizeConfigOptions(config: Record<string, unknown> | null | undefined): LiteralI18nRuntimeConfig {
-  return {
-    localeDir: typeof config?.localeDir === 'string' ? config.localeDir : undefined,
-    keyMode: config?.keyMode === 'hash' ? 'hash' : 'source',
-    idPrefix: typeof config?.idPrefix === 'string' ? config.idPrefix : undefined,
-    idLength: typeof config?.idLength === 'number' ? config.idLength : undefined,
-  };
+  const normalized: LiteralI18nRuntimeConfig = {};
+
+  if (typeof config?.localeDir === 'string') normalized.localeDir = config.localeDir;
+  if (config?.keyMode === 'hash' || config?.keyMode === 'source') normalized.keyMode = config.keyMode;
+  if (typeof config?.idPrefix === 'string') normalized.idPrefix = config.idPrefix;
+  if (typeof config?.idLength === 'number' && Number.isFinite(config.idLength)) {
+    normalized.idLength = config.idLength;
+  }
+
+  return normalized;
+}
+
+function getRuntimeEnvMessageIdOptions(): MessageIdOptions {
+  const options: MessageIdOptions = {};
+  const keyMode = process.env.NEXT_PUBLIC_LITERAL_I18N_KEY_MODE;
+  const idLength = Number(process.env.NEXT_PUBLIC_LITERAL_I18N_ID_LENGTH);
+
+  if (keyMode === 'hash' || keyMode === 'source') options.keyMode = keyMode;
+  if (process.env.NEXT_PUBLIC_LITERAL_I18N_ID_PREFIX) {
+    options.idPrefix = process.env.NEXT_PUBLIC_LITERAL_I18N_ID_PREFIX;
+  }
+  if (Number.isFinite(idLength)) options.idLength = idLength;
+
+  return options;
 }
 
 function resolveConfigPath(cwd = process.cwd()): string | undefined {
@@ -172,8 +190,8 @@ function mergeRuntimeOptions<T extends ServerTranslatorOptions>(
   options: T = {} as T,
 ): T & ServerTranslatorOptions {
   return {
-    ...getEnvMessageIdOptions(),
     ...config,
+    ...getRuntimeEnvMessageIdOptions(),
     ...options,
   };
 }
@@ -242,6 +260,39 @@ function normalizeManifestFileEntry(entry: string[] | LiteralI18nManifestFile): 
     keys: Array.isArray(entry.keys) ? entry.keys : [],
     route: entry.route,
   };
+}
+
+function inferHashOptionsFromKey(key: string): MessageIdOptions | undefined {
+  const match = key.match(/^(.+?)([a-f0-9]{8,16})$/);
+  if (!match) return undefined;
+
+  return {
+    keyMode: 'hash',
+    idPrefix: match[1],
+    idLength: match[2].length,
+  };
+}
+
+function inferMessageIdOptions(input: {
+  messages?: TranslationMessages | null;
+  sourceMap?: TranslationMessages | null;
+}): MessageIdOptions {
+  for (const value of Object.values(input.sourceMap ?? {})) {
+    if (typeof value !== 'string') continue;
+    const inferred = inferHashOptionsFromKey(value);
+    if (inferred) return inferred;
+  }
+
+  const topLevelKeys = Object.keys(input.messages ?? {});
+  const inferredKeys = topLevelKeys
+    .map((key) => inferHashOptionsFromKey(key))
+    .filter((options): options is MessageIdOptions => Boolean(options));
+
+  if (inferredKeys.length > 0 && inferredKeys.length >= Math.ceil(topLevelKeys.length / 2)) {
+    return inferredKeys[0];
+  }
+
+  return {};
 }
 
 function selectManifestKeys(manifest: LiteralI18nManifest, pathname: string): Set<string> {
@@ -463,13 +514,17 @@ export async function getI18nProviderProps(
   const sourceMap = runtimeOptions.includeSourceMap === true || options.sourceMap !== undefined
     ? runtimeOptions.sourceMap ?? await store.loadSourceMap()
     : undefined;
+  const inferredOptions = inferMessageIdOptions({
+    messages,
+    sourceMap: sourceMap ?? await store.loadSourceMap(),
+  });
 
   const providerProps: I18nProviderRuntimeProps = {
     locale,
     messages,
-    keyMode: runtimeOptions.keyMode,
-    idPrefix: runtimeOptions.idPrefix,
-    idLength: runtimeOptions.idLength,
+    keyMode: inferredOptions.keyMode ?? runtimeOptions.keyMode,
+    idPrefix: runtimeOptions.idPrefix ?? inferredOptions.idPrefix,
+    idLength: runtimeOptions.idLength ?? inferredOptions.idLength,
   };
   if (sourceMap !== undefined) providerProps.sourceMap = sourceMap;
 

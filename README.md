@@ -4,7 +4,7 @@
 
 Literal I18n 是一个面向 React / Next.js 的字面量国际化工具。你直接在组件里写原文，插件负责 AST 扫描、生成稳定 key、补齐语言 JSON，并在运行时按页面加载需要的翻译。
 
-当前版本：`0.2.0`
+当前版本：`0.2.1`
 
 ## 设计理念
 
@@ -546,13 +546,11 @@ Next.js 16 / Turbopack 下，翻译文件更新后页面可能需要手动刷新
 
 详见 [CHANGELOG.md](CHANGELOG.md)。
 
-`0.2.0` 的重点：
+`0.2.1` 的重点：
 
-- 文档重写为更清晰的产品化结构。
-- CLI init 作为推荐安装入口。
-- GUI 翻译管理作为核心工作流。
-- 运行时消息读取增加缓存和页面级裁剪说明。
-- Next.js 16 `proxy.ts` 和 Turbopack 场景说明更明确。
+- 修复 hash 模式下运行时配置 fallback 可能错误下发 `keyMode: "source"` 的问题。
+- hash 项目不再需要依赖 `includeSourceMap: true` 才能让客户端通过原文查到 hash key 对应译文。
+- `0.2.0` 的文档重写、CLI init、GUI 管理和运行时裁剪能力继续保留。
 
 ## 疑问提交
 
