@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.5 (2026-06-23)
+
+### Fixed
+
+- Fixed development extraction fallback when Next.js starts the internal watcher in a short-lived config process. Webpack watch extraction now remains enabled unless a watcher is actually active in the current compiler process, preventing source edits such as `<T text="powered by" />` from being missed.
+
+### Tests
+
+- Added runtime regression coverage for the Next.js dev watch fallback.
+
 ## 0.2.4 (2026-06-23)
 
 ### Added
@@ -14,14 +24,9 @@
 - Replaced the GUI literal-language filter with locale-aware copy search.
 - Restored normal checkbox sizing in the GUI after adding the AST-unused select-all control.
 
-### Fixed
-
-- Fixed development extraction fallback when Next.js starts the internal watcher in a short-lived config process. Webpack watch extraction now remains enabled unless a watcher is actually active in the current compiler process, preventing source edits such as `<T text="powered by" />` from being missed.
-
 ### Tests
 
 - Added GUI regression coverage for locale-aware copy search, id display, removed literal-language UI, and AST-unused select-all rendering.
-- Added runtime regression coverage for the Next.js dev watch fallback.
 
 ## 0.2.3 (2026-06-22)
 

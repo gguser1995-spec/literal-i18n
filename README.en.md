@@ -4,7 +4,7 @@
 
 Literal I18n is a literal-string driven i18n toolkit for React and Next.js. You write real source copy in components, and the package handles AST extraction, stable key generation, locale JSON updates, and navigation-scoped runtime message loading.
 
-Current version: `0.2.4`
+Current version: `0.2.5`
 
 ## Design Philosophy
 
@@ -632,13 +632,10 @@ These helpers are optional. You can use DeepSeek, any OpenAI-compatible API, you
 
 See [CHANGELOG.md](CHANGELOG.md).
 
-Highlights in `0.2.4`:
+Highlights in `0.2.5`:
 
-- GUI replaced literal-language filtering with copy search against the selected locale's JSON value.
-- GUI now displays extracted context ids next to message keys.
-- GUI AST-unused rows now support select-all, with normal checkbox sizing restored.
-- Documentation now explains how to get the current locale on both client and server.
 - Fixed missed automatic extraction in Next.js dev when the internal watcher starts in a short-lived config process and webpack watch fallback was incorrectly skipped.
+- The `0.2.4` GUI copy search, id display, AST-unused select-all, checkbox sizing fix, and current-locale documentation remain included.
 
 ## Questions And Issues
 
