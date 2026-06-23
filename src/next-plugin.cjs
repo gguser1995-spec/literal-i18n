@@ -352,8 +352,7 @@ function withLiteralI18n(nextConfig = {}, options = {}) {
   let pluginAdded = false;
   const isDevCommand = isNextDevCommand();
   const shouldStartDevWatch = shouldStartInternalDevWatch({ options });
-  const shouldSkipWebpackWatchExtraction =
-    shouldStartDevWatch || (isDevCommand && options.devWatch === false);
+  const shouldDisableWatchExtraction = isDevCommand && options.devWatch === false;
 
   if (nextMajor && nextMajor >= 16 && outputConfig.turbopack === undefined) {
     outputConfig.turbopack = {};
@@ -371,7 +370,7 @@ function withLiteralI18n(nextConfig = {}, options = {}) {
         config.plugins.push(new LiteralI18nNextPlugin({
           ...options,
           cwd: context.dir,
-          skipWebpackWatchExtraction: shouldSkipWebpackWatchExtraction,
+          skipWebpackWatchExtraction: shouldDisableWatchExtraction || devWatcherByCwd.has(context.dir),
         }));
         pluginAdded = true;
       }

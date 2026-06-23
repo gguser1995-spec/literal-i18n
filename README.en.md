@@ -638,6 +638,7 @@ Highlights in `0.2.4`:
 - GUI now displays extracted context ids next to message keys.
 - GUI AST-unused rows now support select-all, with normal checkbox sizing restored.
 - Documentation now explains how to get the current locale on both client and server.
+- Fixed missed automatic extraction in Next.js dev when the internal watcher starts in a short-lived config process and webpack watch fallback was incorrectly skipped.
 
 ## Questions And Issues
 

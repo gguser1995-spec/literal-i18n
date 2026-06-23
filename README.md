@@ -638,6 +638,7 @@ Next.js 16 / Turbopack 下，翻译文件更新后页面可能需要手动刷新
 - GUI 在 key 旁显示 `<T id="...">` 或 `tr(..., { id })` 的上下文 id。
 - GUI 的 AST 未使用项支持全选，并修复 checkbox 尺寸。
 - 文档补充客户端和服务端获取当前语言的方法。
+- 修复 Next.js dev 里内置 watcher 落到短生命周期进程后，webpack watch fallback 被错误跳过导致新增 `<T>` 没有自动抽取的问题。
 
 ## 疑问提交
 

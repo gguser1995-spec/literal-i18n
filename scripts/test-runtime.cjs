@@ -187,13 +187,57 @@ async function testHashRuntimeContract() {
   }
 }
 
+async function testNextPluginDevWatchFallback() {
+  const watcherCwd = createTempProject('dev-watch-intended');
+  const compilerCwd = createTempProject('dev-watch-compiler');
+  const originalArgv = process.argv.slice();
+  try {
+    process.argv.push('dev');
+    fs.mkdirSync(path.join(watcherCwd, 'src'), { recursive: true });
+    fs.mkdirSync(path.join(compilerCwd, 'src'), { recursive: true });
+
+    const withLiteralI18n = require('../src/next-plugin.cjs');
+    const config = withLiteralI18n({}, {
+      cwd: watcherCwd,
+      devWatch: true,
+      keyMode: 'hash',
+      locales: ['en'],
+      silent: true,
+      sourceDir: 'src',
+      sourceLocale: 'en',
+      sourceMapOutput: 'src/messages/source-map.json',
+      sourceOutput: 'src/messages/en.json',
+    });
+    const webpackConfig = config.webpack({ plugins: [] }, { dir: compilerCwd });
+    assert.equal(webpackConfig.plugins.length, 1);
+    assert.equal(webpackConfig.plugins[0].skipWebpackWatchExtraction, false);
+
+    const disabledConfig = withLiteralI18n({}, {
+      cwd: compilerCwd,
+      devWatch: false,
+      sourceDir: 'src',
+      sourceLocale: 'en',
+      locales: ['en'],
+    });
+    const disabledWebpackConfig = disabledConfig.webpack({ plugins: [] }, { dir: compilerCwd });
+    assert.equal(disabledWebpackConfig.plugins[0].skipWebpackWatchExtraction, true);
+  } finally {
+    process.argv.length = 0;
+    process.argv.push(...originalArgv);
+    fs.rmSync(watcherCwd, { recursive: true, force: true });
+    fs.rmSync(compilerCwd, { recursive: true, force: true });
+  }
+}
+
 (async () => {
   await testPropTranslatorExtraction();
-  console.log('[literal-i18n] runtime acceptance 1/3 passed: prop translator extraction');
+  console.log('[literal-i18n] runtime acceptance 1/4 passed: prop translator extraction');
   await testAliasImportRouteManifest();
-  console.log('[literal-i18n] runtime acceptance 2/3 passed: alias import route manifest');
+  console.log('[literal-i18n] runtime acceptance 2/4 passed: alias import route manifest');
   await testHashRuntimeContract();
-  console.log('[literal-i18n] runtime acceptance 3/3 passed: hash runtime contract');
+  console.log('[literal-i18n] runtime acceptance 3/4 passed: hash runtime contract');
+  await testNextPluginDevWatchFallback();
+  console.log('[literal-i18n] runtime acceptance 4/4 passed: dev watch webpack fallback');
 })().catch((error) => {
   console.error(error.stack || error.message);
   process.exitCode = 1;
