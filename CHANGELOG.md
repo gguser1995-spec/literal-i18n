@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.2.4 (2026-06-23)
+
+### Added
+
+- Added current-locale documentation for client hooks and server helpers.
+- Added GUI copy search that filters against the selected locale's JSON value instead of literal-language detection.
+- Added GUI display of extracted message context ids next to message keys.
+- Added a select-all checkbox for AST-unused rows in the GUI.
+
+### Changed
+
+- Replaced the GUI literal-language filter with locale-aware copy search.
+- Restored normal checkbox sizing in the GUI after adding the AST-unused select-all control.
+
+### Tests
+
+- Added GUI regression coverage for locale-aware copy search, id display, removed literal-language UI, and AST-unused select-all rendering.
+
 ## 0.2.3 (2026-06-22)
 
 ### Fixed
@@ -31,6 +49,7 @@
 - Hash-mode clients can resolve translations from hashed message keys without requiring `includeSourceMap: true` as a workaround.
 - `getI18nProviderProps` now infers hash message id options from `source-map.json` or hashed message keys when runtime config and generated message artifacts disagree.
 - Runtime JSON reads now avoid async raw file-content promises, preventing Next.js dev/RSC payloads from pushing extra pretty-printed locale, manifest, or source-map JSON chunks into `view-source`.
+
 ## 0.2.0 (2026-06-21)
 
 ### Added

@@ -41,6 +41,7 @@ function createFixture(keyMode = 'hash') {
       records: [
         { text: 'Hello World', kind: 'component', file: 'src/app/[locale]/page.tsx', line: 3, column: 5 },
         { text: '你好 Name', kind: 'component', file: 'src/app/[locale]/page.tsx', line: 4, column: 5 },
+        { text: 'Choose plan', id: 'd', kind: 'component', file: 'src/app/[locale]/page.tsx', line: 5, column: 5 },
       ],
       imports: ['src/components/shared.tsx'],
     },
@@ -60,6 +61,7 @@ function createFixture(keyMode = 'hash') {
   const layoutKey = artifacts.sourceMap['Layout label'];
   const sharedKey = artifacts.sourceMap['Shared component'];
   const mixedKey = artifacts.sourceMap['你好 Name'];
+  const choosePlanKey = artifacts.sourceMap['Choose plan_d'];
 
   fs.mkdirSync(path.join(cwd, 'src/messages'), { recursive: true });
   writeJson(path.join(cwd, '.next/cache/literal-i18n/extracted-by-file.json'), { files: recordsByFile });
@@ -77,6 +79,7 @@ function createFixture(keyMode = 'hash') {
     [layoutKey]: 'Layout label',
     [sharedKey]: '',
     [mixedKey]: '你好 Name',
+    [choosePlanKey]: '选择方案',
     stale_zh: '旧值',
   });
   fs.writeFileSync(
@@ -100,7 +103,7 @@ function createFixture(keyMode = 'hash') {
 
   return {
     cwd,
-    keys: { helloKey, layoutKey, mixedKey, sharedKey },
+    keys: { choosePlanKey, helloKey, layoutKey, mixedKey, sharedKey },
   };
 }
 
@@ -139,8 +142,16 @@ export default function Page() {
   const sourceQuery = queryProject(project, { locale: 'zh', source: '<T text="Hello World" />' });
   assert.deepEqual(sourceQuery.localeRows.map((row) => row.key), [hashFixture.keys.helloKey]);
 
-  const mixedQuery = queryProject(project, { locale: 'zh', literalLanguage: 'mixed' });
-  assert.equal(mixedQuery.localeRows.some((row) => row.key === hashFixture.keys.mixedKey), true);
+  const sourceCopyQuery = queryProject(project, { locale: 'en', copy: 'Choose plan' });
+  assert.deepEqual(sourceCopyQuery.localeRows.map((row) => row.key), [hashFixture.keys.choosePlanKey]);
+  assert.equal(sourceCopyQuery.localeRows[0].id, 'd');
+
+  const targetCopyQuery = queryProject(project, { locale: 'zh', copy: '选择方案' });
+  assert.deepEqual(targetCopyQuery.localeRows.map((row) => row.key), [hashFixture.keys.choosePlanKey]);
+  assert.equal(targetCopyQuery.sourceMapRows.some((row) => row.key === hashFixture.keys.choosePlanKey && row.id === 'd'), true);
+
+  const wrongLocaleCopyQuery = queryProject(project, { locale: 'zh', copy: 'Choose plan' });
+  assert.equal(wrongLocaleCopyQuery.localeRows.some((row) => row.key === hashFixture.keys.choosePlanKey), false);
 
   const unused = listUnused(project);
   assert.equal(unused.items.some((item) => item.type === 'sourceMap' && item.key === 'Old source'), true);
@@ -225,6 +236,11 @@ async function roundThreeHttpGui() {
     assert.match(rootHtml, /compact-table/);
     assert.match(rootHtml, /compact-textarea/);
     assert.match(rootHtml, /data-collapse-target="localeSection"/);
+    assert.match(rootHtml, /文案搜索/);
+    assert.doesNotMatch(rootHtml, /字面量语言/);
+    assert.doesNotMatch(rootHtml, /literalLanguageInput/);
+    assert.match(rootHtml, /unusedSelectAll/);
+    assert.match(rootHtml, /全选 AST 未使用项/);
 
     const projectResponse = await fetch(`${started.url}/api/project`);
     const projectJson = await projectResponse.json();
@@ -236,6 +252,13 @@ async function roundThreeHttpGui() {
     assert.equal(queryJson.ok, true);
     assert.equal(queryJson.data.localeRows.length, 1);
     assert.equal(queryJson.data.localeRows[0].key, fixture.keys.helloKey);
+
+    const copyQueryResponse = await fetch(`${started.url}/api/query?locale=zh&copy=${encodeURIComponent('选择方案')}`);
+    const copyQueryJson = await copyQueryResponse.json();
+    assert.equal(copyQueryJson.ok, true);
+    assert.equal(copyQueryJson.data.localeRows.length, 1);
+    assert.equal(copyQueryJson.data.localeRows[0].key, fixture.keys.choosePlanKey);
+    assert.equal(copyQueryJson.data.localeRows[0].id, 'd');
 
     const forgedDelete = await fetch(`${started.url}/api/unused/delete`, {
       method: 'POST',

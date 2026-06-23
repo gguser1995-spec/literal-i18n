@@ -174,6 +174,24 @@ function renderStaticPage() {
       color: var(--text);
       padding: 8px 10px;
     }
+    input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      min-height: 0;
+      padding: 0;
+      margin: 0;
+      accent-color: var(--primary);
+      vertical-align: middle;
+    }
+    .checkbox-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
     textarea {
       min-height: 68px;
       resize: vertical;
@@ -337,14 +355,8 @@ function renderStaticPage() {
           <label>key
             <input id="keyInput" name="key" autocomplete="off" placeholder="m_...">
           </label>
-          <label>字面量语言
-            <select id="literalLanguageInput" name="literalLanguage">
-              <option value="all">all</option>
-              <option value="english">english</option>
-              <option value="chinese">chinese</option>
-              <option value="mixed">mixed</option>
-              <option value="unknown">unknown</option>
-            </select>
+          <label>文案搜索
+            <input id="copyInput" name="copy" autocomplete="off" placeholder="Choose plan">
           </label>
           <div class="filter-actions">
             <button class="primary" type="submit">查询</button>
@@ -434,9 +446,9 @@ function renderStaticPage() {
       return {
         url: $('urlInput').value.trim(),
         source: $('sourceInput').value.trim(),
+        copy: $('copyInput').value.trim(),
         locale: $('localeInput').value,
         key: $('keyInput').value.trim(),
-        literalLanguage: $('literalLanguageInput').value,
       };
     }
 
@@ -471,8 +483,8 @@ function renderStaticPage() {
         $('sourceMapTable').innerHTML = '<div class="empty">没有结果</div>';
         return;
       }
-      $('sourceMapTable').innerHTML = '<table class="compact-table"><thead><tr><th>source-map key</th><th>message key</th><th>AST 状态</th></tr></thead><tbody>' +
-        rows.map((row) => '<tr><td><code>' + escapeHtml(row.sourceMapKey) + '</code></td><td><code>' + escapeHtml(row.messageKey) + '</code></td><td><span class="status ' + escapeHtml(row.astStatus) + '">' + escapeHtml(row.astStatus) + '</span></td></tr>').join('') +
+      $('sourceMapTable').innerHTML = '<table class="compact-table"><thead><tr><th>source-map key</th><th>message key</th><th style="width:110px">id</th><th>AST 状态</th></tr></thead><tbody>' +
+        rows.map((row) => '<tr><td><code>' + escapeHtml(row.sourceMapKey) + '</code></td><td><code>' + escapeHtml(row.messageKey) + '</code></td><td><code>' + escapeHtml(row.id) + '</code></td><td><span class="status ' + escapeHtml(row.astStatus) + '">' + escapeHtml(row.astStatus) + '</span></td></tr>').join('') +
         '</tbody></table>';
     }
 
@@ -485,12 +497,13 @@ function renderStaticPage() {
         $('localeTable').innerHTML = '<div class="empty">没有结果</div>';
         return;
       }
-      $('localeTable').innerHTML = '<table class="compact-table"><thead><tr><th style="width:92px">状态</th><th style="width:176px">key</th><th>source text</th><th>target value</th><th style="width:228px">操作</th></tr></thead><tbody>' +
+      $('localeTable').innerHTML = '<table class="compact-table"><thead><tr><th style="width:92px">状态</th><th style="width:176px">key</th><th style="width:110px">id</th><th>source text</th><th>target value</th><th style="width:228px">操作</th></tr></thead><tbody>' +
         rows.map((row) => {
           const inputId = 'target-' + row.key.replace(/[^a-zA-Z0-9_-]/g, '_');
           return '<tr data-key="' + escapeHtml(row.key) + '">' +
             '<td><span class="status ' + escapeHtml(row.status) + '">' + escapeHtml(row.status) + '</span></td>' +
             '<td><code>' + escapeHtml(row.key) + '</code></td>' +
+            '<td><code>' + escapeHtml(row.id) + '</code></td>' +
             '<td>' + escapeHtml(row.source) + '</td>' +
             '<td><textarea class="compact-textarea" rows="1" id="' + inputId + '" data-target-key="' + escapeHtml(row.key) + '"' + (row.canSave ? '' : ' disabled') + '>' + escapeHtml(row.target) + '</textarea></td>' +
             '<td><div class="actions">' +
@@ -520,7 +533,7 @@ function renderStaticPage() {
         $('unusedTable').innerHTML = '<div class="empty">没有结果</div>';
         return;
       }
-      $('unusedTable').innerHTML = '<table class="compact-table"><thead><tr><th style="width:54px">选择</th><th>文件</th><th style="width:116px">类型</th><th>key/source</th><th>value</th><th style="width:92px">操作</th></tr></thead><tbody>' +
+      $('unusedTable').innerHTML = '<table class="compact-table"><thead><tr><th style="width:76px"><label class="checkbox-label"><input type="checkbox" id="unusedSelectAll" aria-label="全选 AST 未使用项"> 全选</label></th><th>文件</th><th style="width:116px">类型</th><th>key/source</th><th>value</th><th style="width:92px">操作</th></tr></thead><tbody>' +
         rows.map((row, index) => '<tr>' +
           '<td><input type="checkbox" data-unused-index="' + index + '" aria-label="select row"></td>' +
           '<td><code>' + escapeHtml(row.file) + '</code></td>' +
@@ -530,6 +543,16 @@ function renderStaticPage() {
           '<td><button type="button" class="danger" data-action="delete-unused" data-index="' + index + '">删除</button></td>' +
         '</tr>').join('') +
         '</tbody></table>';
+      syncUnusedSelectAll();
+    }
+
+    function syncUnusedSelectAll() {
+      const selectAll = $('unusedSelectAll');
+      if (!selectAll) return;
+      const checkboxes = Array.from(document.querySelectorAll('[data-unused-index]'));
+      const checkedCount = checkboxes.filter((input) => input.checked).length;
+      selectAll.checked = checkboxes.length > 0 && checkedCount === checkboxes.length;
+      selectAll.indeterminate = checkedCount > 0 && checkedCount < checkboxes.length;
     }
 
     function toggleSection(button) {
@@ -605,6 +628,20 @@ function renderStaticPage() {
       }
     });
 
+    document.addEventListener('change', (event) => {
+      if (event.target.id === 'unusedSelectAll') {
+        document.querySelectorAll('[data-unused-index]').forEach((input) => {
+          input.checked = event.target.checked;
+        });
+        syncUnusedSelectAll();
+        return;
+      }
+
+      if (event.target.matches('[data-unused-index]')) {
+        syncUnusedSelectAll();
+      }
+    });
+
     $('filtersForm').addEventListener('submit', async (event) => {
       event.preventDefault();
       try {
@@ -617,8 +654,8 @@ function renderStaticPage() {
     $('resetBtn').addEventListener('click', async () => {
       $('urlInput').value = '';
       $('sourceInput').value = '';
+      $('copyInput').value = '';
       $('keyInput').value = '';
-      $('literalLanguageInput').value = 'all';
       await runQuery().catch((error) => toast(error.message));
     });
 

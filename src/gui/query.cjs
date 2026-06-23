@@ -125,13 +125,13 @@ function applyRowFilters(row, filters) {
     const values = [row.source, row.sourceMapKey, row.messageKey, row.key];
     if (!values.some((value) => includesText(value, filters.sourceNeedle))) return false;
   }
+  if (filters.copyNeedle) {
+    const values = [row.target];
+    if (!values.some((value) => includesText(value, filters.copyNeedle))) return false;
+  }
   if (filters.keyNeedle) {
     const values = [row.key, row.messageKey, row.sourceMapKey];
     if (!values.some((value) => includesText(value, filters.keyNeedle))) return false;
-  }
-  if (filters.literalLanguage && filters.literalLanguage !== 'all') {
-    const language = detectLiteralLanguage(row.source || row.sourceMapKey || '');
-    if (language !== filters.literalLanguage) return false;
   }
   return true;
 }
@@ -139,19 +139,20 @@ function applyRowFilters(row, filters) {
 function queryProject(project, input = {}) {
   const locale = input.locale || project.options.locales[0] || project.options.sourceLocale;
   const sourceNeedle = extractSourceNeedle(input.source);
+  const copyNeedle = String(input.copy || '').trim();
   const keyNeedle = String(input.key || '').trim();
-  const literalLanguage = input.literalLanguage || 'all';
   const routeFilter = routeKeysFromManifest(project.ast.manifest, input.url);
   const routeKeys = routeFilter && routeFilter.matched ? routeFilter.keys : undefined;
   const sourceMap = project.ast.sourceMap || {};
   const sourceMapReverse = createSourceMapReverse(sourceMap);
   const sourceMessages = project.ast.sourceMessages || {};
+  const sourceMeta = project.ast.sourceMeta || {};
   const localeMessages = locale === project.options.sourceLocale
     ? sourceMessages
     : getLocaleMessages(project, locale);
   const filters = {
+    copyNeedle,
     keyNeedle,
-    literalLanguage,
     routeKeys,
     sourceNeedle,
   };
@@ -169,14 +170,22 @@ function queryProject(project, input = {}) {
   }
 
   const sourceMapRows = Object.entries(sourceMap)
-    .map(([sourceMapKey, messageKey]) => ({
-      sourceMapKey,
-      messageKey,
-      key: messageKey,
-      source: sourceTextForKey(messageKey, sourceMessages, sourceMapReverse) || sourceMapKey,
-      astStatus: project.ast.validKeys.has(messageKey) ? 'used' : 'unused',
-      canDelete: project.ast.hasAstCache && !project.ast.validKeys.has(messageKey),
-    }))
+    .map(([sourceMapKey, messageKey]) => {
+      const source = sourceTextForKey(messageKey, sourceMessages, sourceMapReverse) || sourceMapKey;
+      const target = locale === project.options.sourceLocale
+        ? source
+        : toStringValue(localeMessages[messageKey]);
+      return {
+        sourceMapKey,
+        messageKey,
+        key: messageKey,
+        id: toStringValue(sourceMeta[messageKey]?.id),
+        source,
+        target,
+        astStatus: project.ast.validKeys.has(messageKey) ? 'used' : 'unused',
+        canDelete: project.ast.hasAstCache && !project.ast.validKeys.has(messageKey),
+      };
+    })
     .filter((row) => applyRowFilters(row, filters))
     .sort((left, right) => left.sourceMapKey.localeCompare(right.sourceMapKey));
 
@@ -199,6 +208,7 @@ function queryProject(project, input = {}) {
 
       return {
         key,
+        id: toStringValue(sourceMeta[key]?.id),
         source,
         target,
         status,

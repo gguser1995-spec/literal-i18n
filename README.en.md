@@ -4,7 +4,7 @@
 
 Literal I18n is a literal-string driven i18n toolkit for React and Next.js. You write real source copy in components, and the package handles AST extraction, stable key generation, locale JSON updates, and navigation-scoped runtime message loading.
 
-Current version: `0.2.3`
+Current version: `0.2.4`
 
 ## Design Philosophy
 
@@ -87,6 +87,50 @@ export default async function LocaleLayout({
   const i18n = await getI18nProviderProps(locale);
 
   return <I18nProvider {...i18n}>{children}</I18nProvider>;
+}
+```
+
+Get the current locale:
+
+```tsx
+'use client';
+
+import { useI18n, useTranslate } from 'literal-i18n';
+
+export function LocaleBadge() {
+  const { locale } = useI18n();
+  const { locale: sameLocale, tr } = useTranslate();
+
+  return <span title={sameLocale}>{tr('Current language')}: {locale}</span>;
+}
+```
+
+In Server Components, the most explicit and stable source is App Router's `params.locale`; pass it to the server helper:
+
+```tsx
+import { getLocaleTranslator } from 'literal-i18n/server';
+
+export default async function Page({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale } = await params;
+  const { tr } = await getLocaleTranslator(locale);
+
+  return <h1>{tr('Dashboard')}</h1>;
+}
+```
+
+If your middleware writes a locale header, `getTranslator()` can read the current request locale automatically. If no locale is available, it falls back to `en`:
+
+```ts
+import { getTranslator } from 'literal-i18n/server';
+
+export async function getServerCopy() {
+  const { locale, tr } = await getTranslator();
+
+  return { locale, title: tr('Dashboard') };
 }
 ```
 
@@ -196,7 +240,7 @@ The GUI is for translation management rather than development setup. It reads th
 
 Current capabilities:
 
-- Filter by page URL, source snippet, locale, key, and literal language.
+- Filter by page URL, source snippet, locale, key, and copy search. Copy search uses the selected locale's JSON value; for example, selecting `zh` searches Chinese translations, while selecting the source locale searches source copy.
 - View readonly `source-map.json`.
 - View and edit target locale JSON files such as `zh.json` or `de.json`.
 - Clear a translation without deleting its key.
@@ -510,8 +554,8 @@ In Next.js 16 / Turbopack, translation file updates may require a manual page re
 
 - `T`
 - `I18nProvider`
-- `useTranslate()`
-- `useI18n()`
+- `useTranslate()`: returns `{ locale, tr }`.
+- `useI18n()`: returns `{ locale, translate }`.
 - `createTranslator(options)`
 - `createMessageId(text, options)`
 - `getMessageKey(text, options)`
@@ -526,8 +570,8 @@ In Next.js 16 / Turbopack, translation file updates may require a manual page re
 - `loadLiteralI18nConfig(cwd?)`
 - `getMessageStore(localeDir?)`
 - `getI18nProviderProps(locale, options?)`
-- `getTranslator(input?)`
-- `getLocaleTranslator(locale, options?)`
+- `getTranslator(input?)`: returns `{ locale, messages, tr }`; without an explicit locale, it tries to read the request header.
+- `getLocaleTranslator(locale, options?)`: returns `{ locale, messages, tr }`.
 
 Common options for `getI18nProviderProps` / `getTranslator` / `getLocaleTranslator`:
 
@@ -588,12 +632,12 @@ These helpers are optional. You can use DeepSeek, any OpenAI-compatible API, you
 
 See [CHANGELOG.md](CHANGELOG.md).
 
-Highlights in `0.2.3`:
+Highlights in `0.2.4`:
 
-- Fixed source-text fallback after client navigation from `/zh` to `/zh/create` under persistent Next.js App Router locale layouts.
-- `getI18nProviderProps(locale)` now defaults to a navigation-safe payload scope for layouts that do not unmount during client navigation.
-- Added `payloadScope: 'route'` for advanced strict current-route pruning when the provider is refreshed per route.
-- The `0.2.2` prop `tr(...)` extraction, alias manifest, and automated test coverage remain included.
+- GUI replaced literal-language filtering with copy search against the selected locale's JSON value.
+- GUI now displays extracted context ids next to message keys.
+- GUI AST-unused rows now support select-all, with normal checkbox sizing restored.
+- Documentation now explains how to get the current locale on both client and server.
 
 ## Questions And Issues
 
