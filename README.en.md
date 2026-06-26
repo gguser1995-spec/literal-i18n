@@ -2,7 +2,7 @@
 
 [中文](README.md) | [English](README.en.md) | [GitHub](https://github.com/gguser1995-spec/literal-i18n) | [Gitee](https://gitee.com/lwfux/literal-i18n)
 
-Literal I18n is a literal-string driven i18n toolkit for React and Next.js. You write real source copy in components, and the package handles AST extraction, stable key generation, locale JSON updates, and navigation-scoped runtime message loading.
+Literal I18n is a literal-string driven i18n toolkit for React and Next.js. You write real source copy in components, and the package handles AST extraction, stable key generation, locale JSON updates, and current-route runtime message loading.
 
 Current version: `0.2.5`
 
@@ -26,7 +26,7 @@ For production projects, `hash` key mode is recommended. It keeps readable sourc
 | Key management | Manual naming and folder conventions | AST-generated keys with `source` / `hash` modes |
 | Missing translations | Usually runtime/build fallback or errors | Detected during extraction and can be translated by hooks |
 | Repeated source text | Manually split keys | Use `id` to separate translation context |
-| Runtime payload | Often loads the whole locale file | Can prune messages by navigation scope through middleware/proxy + manifest |
+| Runtime payload | Often loads the whole locale file | Can prune messages by current route through middleware/proxy + manifest |
 | Translation management | External platform or manual JSON edits | Built-in local GUI for filtering, clearing, retranslating, and deleting AST-unused entries |
 | Setup cost | Requires a key taxonomy | `npx literal-i18n init --yes` first |
 
@@ -42,6 +42,15 @@ import { T } from 'literal-i18n';
 export function UserLine({ name }: { name: string }) {
   return <T text="Hello {name}" name={name} />;
 }
+```
+
+`<T />` placeholders can also receive React nodes, which is useful when one variable segment needs styling or a link:
+
+```tsx
+<T
+  text="my name {name}"
+  name={<span className="text-red-400">lili</span>}
+/>
 ```
 
 Get translated strings inside Client Components:
@@ -145,7 +154,7 @@ Use `id` when the same source text needs different translations:
 
 ![Demo](docs/output.gif)
 
-The GIF shows the basic development flow from source literals to generated translation files. In real projects, pair it with `literal-i18n gui` for translation management and runtime manifests for navigation-scoped payload control.
+The GIF shows the basic development flow from source literals to generated translation files. In real projects, pair it with `literal-i18n gui` for translation management and runtime manifests for current-route payload control.
 
 ## Installation, CLI First
 
@@ -179,6 +188,7 @@ With a project dependency, the bare `literal-i18n init` command is usually not a
 - `.env.example`
 - `package.json` scripts: `i18n:extract`, `i18n:watch`, and `build`
 - `src/middleware.ts` for Next.js 15, or `src/proxy.ts` for Next.js 16
+- `src/app/api/literal-i18n/messages/route.ts` for route-level message supplements during client navigation
 - simple `next.config.ts/mjs/js` wrapping with `withLiteralI18n(...)`
 
 If the project already has `next.config`, `middleware`, or `proxy`, init does not blindly overwrite them. Simple configs are merged automatically; complex files get manual merge guidance. Re-running init does not insert duplicate blocks.
@@ -368,11 +378,35 @@ export function middleware(request: NextRequest) {
 
 If you have `_rsc`, static asset allowlists, rewrites, or any early-return branch, make sure page requests that need pruning do not bypass this header. Otherwise `getI18nProviderProps(locale)` cannot read pathname and will fall back to full messages.
 
-### Navigation-Safe Runtime Pruning
+### Current-Route Runtime Pruning
 
 Extraction generates `src/messages/manifest.json`, which records App Router routes and the message keys used by each route.
 
-By default, `getI18nProviderProps(locale)` returns the messages needed by the current locale navigation tree, not only the current URL's page messages. This matches persistent Next.js App Router layouts: if `I18nProvider` lives in `app/[locale]/layout.tsx`, a client navigation from `/zh` to `/zh/create` does not unmount that layout, so the provider must already hold the create page keys or the page falls back to source text.
+By default, `getI18nProviderProps(locale)` returns only the messages needed by the route that matches the current pathname. Page A's initial HTML/RSC payload will not include translations from page B or page B/_components.
+
+If `I18nProvider` lives in a persistent layout, a client navigation from page A to page B uses `/api/literal-i18n/messages?locale=zh&pathname=/zh/create` by default to supplement the current route messages and merge them into the existing provider state. This keeps the initial payload strictly pruned while avoiding source-text fallback after soft navigation.
+
+`init` creates the default API route automatically. Existing projects can add it manually:
+
+```ts
+// src/app/api/literal-i18n/messages/route.ts
+export { literalI18nMessagesGET as GET } from 'literal-i18n/server';
+```
+
+Use a custom loader when you need your own auth, cache, or gateway behavior:
+
+```tsx
+<I18nProvider
+  {...i18n}
+  loadMessages={(locale, pathname) =>
+    fetch(`/custom/messages?locale=${locale}&pathname=${pathname}`).then((res) => res.json())
+  }
+>
+  {children}
+</I18nProvider>
+```
+
+If you only need to change the default endpoint, pass `messageEndpoint="/custom/messages"`.
 
 `getI18nProviderProps(locale)` prunes messages through the manifest when:
 
@@ -390,14 +424,16 @@ const i18n = await getI18nProviderProps('zh', {
 });
 ```
 
-If you can guarantee that the provider is recreated per page, or you inject a page-level provider manually, opt into strict current-route pruning:
+If `I18nProvider` lives in a persistent layout and you prefer same-locale client navigation to keep all keys available, opt into navigation-scoped payloads:
 
 ```ts
 const i18n = await getI18nProviderProps('zh', {
   pathname: '/zh/about',
-  payloadScope: 'route',
+  payloadScope: 'navigation',
 });
 ```
+
+`payloadScope: 'navigation'` sends keys for other pages in the same locale navigation tree into the initial source. For strict pruning, keep the default `route` scope or place the provider behind a boundary that refreshes per page.
 
 The full `source-map.json` is not sent to the client by default. Opt in explicitly if needed:
 
@@ -556,6 +592,8 @@ In Next.js 16 / Turbopack, translation file updates may require a manual page re
 - `I18nProvider`
 - `useTranslate()`: returns `{ locale, tr }`.
 - `useI18n()`: returns `{ locale, translate }`.
+- `loadMessages(locale, pathname)`: default client route supplement loader, requesting `/api/literal-i18n/messages`.
+- `DEFAULT_MESSAGE_ENDPOINT`
 - `createTranslator(options)`
 - `createMessageId(text, options)`
 - `getMessageKey(text, options)`
@@ -570,6 +608,7 @@ In Next.js 16 / Turbopack, translation file updates may require a manual page re
 - `loadLiteralI18nConfig(cwd?)`
 - `getMessageStore(localeDir?)`
 - `getI18nProviderProps(locale, options?)`
+- `literalI18nMessagesGET(request)`: default Next.js route handler; use `export { literalI18nMessagesGET as GET } from 'literal-i18n/server'`.
 - `getTranslator(input?)`: returns `{ locale, messages, tr }`; without an explicit locale, it tries to read the request header.
 - `getLocaleTranslator(locale, options?)`: returns `{ locale, messages, tr }`.
 
@@ -579,9 +618,16 @@ Common options for `getI18nProviderProps` / `getTranslator` / `getLocaleTranslat
 - `sourceMap`: manually provided source map.
 - `includeSourceMap`: only for `getI18nProviderProps`, default `false`.
 - `optimizePayload`: only for `getI18nProviderProps`, default `true`.
-- `payloadScope`: only for `getI18nProviderProps`, default `navigation`; set `route` for strict current-route pruning.
+- `payloadScope`: only for `getI18nProviderProps`, default `route`; set `navigation` for same-locale navigation-scoped payloads.
 - `pathname`: only for `getI18nProviderProps`, normally provided by middleware/proxy.
 - `keyMode` / `idPrefix` / `idLength`: hash key options, usually loaded from config.
+
+### `literal-i18n/client-loader`
+
+- `loadMessages(locale, pathname)`: default client route supplement request.
+- `loadMessagesFromEndpoint(locale, pathname, endpoint)`: request a custom endpoint.
+- `normalizeLoadedMessages(payload)`: read mergeable messages from either `{ messages }` or a direct messages object.
+- `DEFAULT_MESSAGE_ENDPOINT`
 
 ### `literal-i18n/middleware`
 

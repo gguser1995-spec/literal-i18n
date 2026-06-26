@@ -20,6 +20,14 @@ export type {
   TranslationMessages,
 } from './translator';
 export {
+  DEFAULT_MESSAGE_ENDPOINT,
+  loadMessages,
+} from './client-loader';
+export type {
+  LoadMessagesHook,
+  RouteMessagesPayload,
+} from './client-loader';
+export {
   I18nProvider,
   T,
   useI18n,

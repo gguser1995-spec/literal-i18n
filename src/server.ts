@@ -8,6 +8,7 @@ import type { I18nProviderProps } from './context';
 
 const NEXT_INTL_LOCALE_HEADER = 'X-NEXT-INTL-LOCALE';
 const LITERAL_I18N_PATHNAME_HEADER = 'x-literal-i18n-pathname';
+const DEFAULT_MESSAGES_API_PATHNAME = '/api/literal-i18n/messages';
 const DEFAULT_LOCALE_DIR = 'src/messages';
 const DEFAULT_MANIFEST_FILE = 'manifest.json';
 const CONFIG_FILES = [
@@ -320,7 +321,7 @@ function routeSharesNavigationScope(pattern: string, pathname: string, locale?: 
 function selectManifestKeys(
   manifest: LiteralI18nManifest,
   pathname: string,
-  payloadScope: PayloadScope = 'navigation',
+  payloadScope: PayloadScope = 'route',
   locale?: string,
 ): Set<string> {
   const keys = new Set<string>();
@@ -438,7 +439,7 @@ export class MessageStore {
   async loadMessagesForPathname(
     locale: string,
     pathname?: string | null,
-    payloadScope: PayloadScope = 'navigation',
+    payloadScope: PayloadScope = 'route',
   ): Promise<TranslationMessages> {
     const messages = await this.loadMessages(locale);
     const normalizedPathname = normalizePathname(pathname);
@@ -544,7 +545,7 @@ export async function getI18nProviderProps(
   const runtimeOptions = mergeRuntimeOptions(config, options);
   const store = getMessageStore(runtimeOptions.localeDir);
   const pathname = options.pathname ?? await getRequestPathnameFromHeaders();
-  const payloadScope = runtimeOptions.payloadScope ?? 'navigation';
+  const payloadScope = runtimeOptions.payloadScope ?? 'route';
   const messages = runtimeOptions.optimizePayload === false
     ? await store.loadMessages(locale)
     : await store.loadMessagesForPathname(locale, pathname, payloadScope);
@@ -566,4 +567,42 @@ export async function getI18nProviderProps(
   if (sourceMap !== undefined) providerProps.sourceMap = sourceMap;
 
   return providerProps;
+}
+
+function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
+  const headers = new Headers(init.headers);
+  headers.set('content-type', 'application/json; charset=utf-8');
+  headers.set('cache-control', 'no-store');
+
+  return new Response(JSON.stringify(body), {
+    ...init,
+    headers,
+  });
+}
+
+export async function literalI18nMessagesGET(request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  const locale = url.searchParams.get('locale') ?? await getRequestLocaleFromHeaders();
+  const pathname = url.searchParams.get('pathname') ?? url.searchParams.get('path') ?? '/';
+
+  if (!locale) {
+    return jsonResponse({
+      error: 'literal-i18n locale is required',
+      endpoint: DEFAULT_MESSAGES_API_PATHNAME,
+    }, { status: 400 });
+  }
+
+  const props = await getI18nProviderProps(locale, {
+    pathname,
+    includeSourceMap: false,
+    payloadScope: 'route',
+  });
+
+  return jsonResponse({
+    locale: props.locale,
+    messages: props.messages,
+    keyMode: props.keyMode,
+    idPrefix: props.idPrefix,
+    idLength: props.idLength,
+  });
 }

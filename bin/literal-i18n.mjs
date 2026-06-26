@@ -265,6 +265,11 @@ export const config = {
 `;
 }
 
+function createMessagesRouteContent() {
+  return `export { literalI18nMessagesGET as GET } from 'literal-i18n/server';
+`;
+}
+
 function maybeWrapNextConfig(content, nextConfigPath, configPath) {
   if (content.includes('withLiteralI18n(')) {
     return { status: 'skip', content, reason: 'next.config already uses withLiteralI18n.' };
@@ -483,6 +488,20 @@ const nextConfig: NextConfig = {};
 export default withLiteralI18n(nextConfig, literalI18nConfig);
 `,
       });
+    }
+
+    if (project.appDir) {
+      const messagesRouteFile = path.join(cwd, project.appDir, 'api/literal-i18n/messages/route.ts');
+      if (existsSync(messagesRouteFile)) {
+        actions.push({ type: 'skip', title: `${path.relative(cwd, messagesRouteFile)} already exists` });
+      } else {
+        actions.push({
+          type: 'write-if-missing',
+          title: `Create ${path.relative(cwd, messagesRouteFile)}`,
+          filePath: messagesRouteFile,
+          content: createMessagesRouteContent(),
+        });
+      }
     }
   }
 

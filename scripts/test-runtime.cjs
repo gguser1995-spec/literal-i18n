@@ -168,22 +168,98 @@ async function testHashRuntimeContract() {
       assert.equal(props.sourceMap, undefined);
       assert.equal(props.messages[pageKey], 'zh:Page title');
       assert.equal(props.messages[headerKey], 'zh:Ailume Music');
-      assert.equal(props.messages[aboutKey], 'zh:About only');
-      assert.equal(props.messages[createKey], 'zh:Create only');
+      assert.equal(props.messages[aboutKey], undefined);
+      assert.equal(props.messages[createKey], undefined);
       assert.equal(props.messages[adminKey], undefined);
 
-      const routeOnlyProps = await server.getI18nProviderProps('zh', {
+      const explicitRouteProps = await server.getI18nProviderProps('zh', {
         pathname: '/zh',
         payloadScope: 'route',
       });
-      assert.equal(routeOnlyProps.messages[pageKey], 'zh:Page title');
-      assert.equal(routeOnlyProps.messages[headerKey], 'zh:Ailume Music');
-      assert.equal(routeOnlyProps.messages[createKey], undefined);
+      assert.equal(explicitRouteProps.messages[pageKey], 'zh:Page title');
+      assert.equal(explicitRouteProps.messages[headerKey], 'zh:Ailume Music');
+      assert.equal(explicitRouteProps.messages[createKey], undefined);
+
+      const navigationProps = await server.getI18nProviderProps('zh', {
+        pathname: '/zh',
+        payloadScope: 'navigation',
+      });
+      assert.equal(navigationProps.messages[pageKey], 'zh:Page title');
+      assert.equal(navigationProps.messages[headerKey], 'zh:Ailume Music');
+      assert.equal(navigationProps.messages[aboutKey], 'zh:About only');
+      assert.equal(navigationProps.messages[createKey], 'zh:Create only');
+      assert.equal(navigationProps.messages[adminKey], undefined);
+
+      const routeResponse = await server.literalI18nMessagesGET(
+        new Request('http://localhost/api/literal-i18n/messages?locale=zh&pathname=/zh/create'),
+      );
+      const routePayload = await routeResponse.json();
+      assert.equal(routeResponse.status, 200);
+      assert.equal(routeResponse.headers.get('cache-control'), 'no-store');
+      assert.equal(routePayload.locale, 'zh');
+      assert.equal(routePayload.messages[createKey], 'zh:Create only');
+      assert.equal(routePayload.messages[pageKey], undefined);
+      assert.equal(routePayload.messages[adminKey], undefined);
     } finally {
       process.chdir(previousCwd);
     }
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
+async function testClientRouteMessagesLoader() {
+  const previousWindow = globalThis.window;
+  const previousFetch = globalThis.fetch;
+  const requests = [];
+
+  try {
+    globalThis.window = {
+      location: {
+        origin: 'http://example.test',
+      },
+    };
+    globalThis.fetch = async (url, init) => {
+      requests.push({ url, init });
+      return {
+        ok: true,
+        async json() {
+          return {
+            locale: 'zh',
+            messages: {
+              hello: '你好',
+            },
+          };
+        },
+      };
+    };
+
+    const client = await import(`../dist/client-loader.js?loader=${Date.now()}`);
+    const payload = await client.loadMessages('zh', '/zh/create');
+
+    assert.equal(requests.length, 1);
+    assert.equal(
+      requests[0].url,
+      'http://example.test/api/literal-i18n/messages?locale=zh&pathname=%2Fzh%2Fcreate',
+    );
+    assert.equal(requests[0].init.headers.accept, 'application/json');
+    assert.deepEqual(payload, {
+      locale: 'zh',
+      messages: {
+        hello: '你好',
+      },
+    });
+  } finally {
+    if (previousWindow === undefined) {
+      delete globalThis.window;
+    } else {
+      globalThis.window = previousWindow;
+    }
+    if (previousFetch === undefined) {
+      delete globalThis.fetch;
+    } else {
+      globalThis.fetch = previousFetch;
+    }
   }
 }
 
@@ -231,13 +307,15 @@ async function testNextPluginDevWatchFallback() {
 
 (async () => {
   await testPropTranslatorExtraction();
-  console.log('[literal-i18n] runtime acceptance 1/4 passed: prop translator extraction');
+  console.log('[literal-i18n] runtime acceptance 1/5 passed: prop translator extraction');
   await testAliasImportRouteManifest();
-  console.log('[literal-i18n] runtime acceptance 2/4 passed: alias import route manifest');
+  console.log('[literal-i18n] runtime acceptance 2/5 passed: alias import route manifest');
   await testHashRuntimeContract();
-  console.log('[literal-i18n] runtime acceptance 3/4 passed: hash runtime contract');
+  console.log('[literal-i18n] runtime acceptance 3/5 passed: hash runtime contract');
+  await testClientRouteMessagesLoader();
+  console.log('[literal-i18n] runtime acceptance 4/5 passed: client route messages loader');
   await testNextPluginDevWatchFallback();
-  console.log('[literal-i18n] runtime acceptance 4/4 passed: dev watch webpack fallback');
+  console.log('[literal-i18n] runtime acceptance 5/5 passed: dev watch webpack fallback');
 })().catch((error) => {
   console.error(error.stack || error.message);
   process.exitCode = 1;

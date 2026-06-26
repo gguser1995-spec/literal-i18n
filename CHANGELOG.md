@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Added route-level client message supplements for persistent providers. `I18nProvider` now listens for client pathname changes, loads the current route package through the default `/api/literal-i18n/messages` endpoint, and merges it with existing messages.
+- Added `literalI18nMessagesGET` for Next.js App Router API routes, plus the standalone `literal-i18n/client-loader` export for default or custom message loading.
+- Added `literal-i18n init` generation for `src/app/api/literal-i18n/messages/route.ts`.
+
+### Changed
+
+- Changed the default `getI18nProviderProps(locale)` payload scope back to strict current-route pruning. `payloadScope: "navigation"` remains available as an explicit opt-in for persistent layout client navigation, but it intentionally sends other pages in the same locale navigation tree.
+
+### Tests
+
+- Updated runtime coverage to assert that default route pruning excludes sibling route keys while explicit navigation scope includes them.
+- Added runtime coverage for the default messages API handler and client route messages loader.
+
 ## 0.2.5 (2026-06-23)
 
 ### Fixed

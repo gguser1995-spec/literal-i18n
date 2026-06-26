@@ -6,7 +6,10 @@ import {
   isValidElement,
   type ReactNode,
   useContext,
+  useEffect,
   useMemo,
+  useRef,
+  useState,
 } from 'react';
 import { PLACEHOLDER_PATTERN, stringifyParam, type TranslateParamValue } from './format';
 import {
@@ -16,6 +19,11 @@ import {
   type TranslationMessages,
 } from './translator';
 import type { MessageIdOptions } from './id';
+import {
+  loadMessagesFromEndpoint,
+  normalizeLoadedMessages,
+  type LoadMessagesHook,
+} from './client-loader';
 
 interface I18nContextValue {
   locale?: string;
@@ -33,6 +41,8 @@ export interface I18nProviderProps extends MessageIdOptions {
   messages?: TranslationMessages | null;
   sourceMap?: TranslationMessages | null;
   translate?: TranslateHook;
+  loadMessages?: LoadMessagesHook | false;
+  messageEndpoint?: string;
 }
 
 export type TProps = {
@@ -48,6 +58,47 @@ const I18nContext = createContext<I18nContextValue>({
   translate: defaultTranslate,
 });
 
+const LOCATION_CHANGE_EVENT = 'literal-i18n:location-change';
+let historyPatched = false;
+
+function getCurrentPathname(): string | undefined {
+  if (typeof window === 'undefined') return undefined;
+  return window.location.pathname || '/';
+}
+
+function dispatchLocationChange(): void {
+  window.dispatchEvent(new Event(LOCATION_CHANGE_EVENT));
+}
+
+function patchHistoryOnce(): void {
+  if (historyPatched || typeof window === 'undefined') return;
+  historyPatched = true;
+
+  for (const method of ['pushState', 'replaceState'] as const) {
+    const original = window.history[method];
+    window.history[method] = function patchedHistoryMethod(...args) {
+      const result = original.apply(this, args);
+      dispatchLocationChange();
+      return result;
+    };
+  }
+}
+
+function subscribePathnameChange(callback: () => void): () => void {
+  if (typeof window === 'undefined') return () => {};
+
+  patchHistoryOnce();
+  window.addEventListener(LOCATION_CHANGE_EVENT, callback);
+  window.addEventListener('popstate', callback);
+  window.addEventListener('hashchange', callback);
+
+  return () => {
+    window.removeEventListener(LOCATION_CHANGE_EVENT, callback);
+    window.removeEventListener('popstate', callback);
+    window.removeEventListener('hashchange', callback);
+  };
+}
+
 export function I18nProvider({
   children,
   locale,
@@ -57,13 +108,57 @@ export function I18nProvider({
   keyMode,
   idPrefix,
   idLength,
+  loadMessages: routeMessagesLoader,
+  messageEndpoint,
 }: I18nProviderProps) {
+  const [runtimeMessages, setRuntimeMessages] = useState<TranslationMessages | null | undefined>(messages);
+  const [pathname, setPathname] = useState<string | undefined>(() => getCurrentPathname());
+  const lastLoadedPathnameRef = useRef<string | undefined>(pathname);
+
+  useEffect(() => {
+    setRuntimeMessages(messages);
+  }, [messages]);
+
+  useEffect(() => {
+    return subscribePathnameChange(() => setPathname(getCurrentPathname()));
+  }, []);
+
+  useEffect(() => {
+    if (routeMessagesLoader === false || !pathname) return;
+    if (lastLoadedPathnameRef.current === pathname) return;
+
+    lastLoadedPathnameRef.current = pathname;
+    const loader = routeMessagesLoader ?? ((nextLocale, nextPathname) => (
+      loadMessagesFromEndpoint(nextLocale, nextPathname, messageEndpoint)
+    ));
+    let cancelled = false;
+
+    loader(locale, pathname)
+      .then((payload) => {
+        if (cancelled) return;
+        const loadedMessages = normalizeLoadedMessages(payload);
+        if (!loadedMessages) return;
+        setRuntimeMessages((currentMessages) => ({
+          ...(currentMessages ?? {}),
+          ...loadedMessages,
+        }));
+      })
+      .catch(() => {
+        // Route message loading is a progressive enhancement. Existing messages
+        // keep rendering if the endpoint is missing or the network fails.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [locale, messageEndpoint, pathname, routeMessagesLoader]);
+
   const contextValue = useMemo<I18nContextValue>(() => {
     return {
       locale,
-      translate: translate ?? createTranslator({ locale, messages, sourceMap, keyMode, idPrefix, idLength }),
+      translate: translate ?? createTranslator({ locale, messages: runtimeMessages, sourceMap, keyMode, idPrefix, idLength }),
     };
-  }, [idLength, idPrefix, keyMode, locale, messages, sourceMap, translate]);
+  }, [idLength, idPrefix, keyMode, locale, runtimeMessages, sourceMap, translate]);
 
   return <I18nContext.Provider value={contextValue}>{children}</I18nContext.Provider>;
 }
