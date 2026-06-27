@@ -4,7 +4,7 @@
 
 Literal I18n 是一个面向 React / Next.js 的字面量国际化工具。你直接在组件里写原文，插件负责 AST 扫描、生成稳定 key、补齐语言 JSON，并在运行时按当前路由加载需要的翻译。
 
-当前版本：`0.2.5`
+当前版本：`0.2.6`
 
 ## 设计理念
 
@@ -678,10 +678,11 @@ Next.js 16 / Turbopack 下，翻译文件更新后页面可能需要手动刷新
 
 详见 [CHANGELOG.md](CHANGELOG.md)。
 
-`0.2.5` 的重点：
+`0.2.6` 的重点：
 
-- 修复 Next.js dev 里内置 watcher 落到短生命周期进程后，webpack watch fallback 被错误跳过导致新增 `<T>` 没有自动抽取的问题。
-- `0.2.4` 的 GUI 文案搜索、id 显示、AST 未使用项全选、checkbox 尺寸修复和当前语言文档继续保留。
+- 默认首屏 payload 回到严格当前路由裁剪，避免页面 A 带出页面 B 或页面 B/_components 的文案。
+- 新增客户端路由补包机制：持久 `I18nProvider` 软跳后会按当前 pathname 拉取 messages 并合并，避免回退原文。
+- 新增默认 `/api/literal-i18n/messages` route handler、`literal-i18n/client-loader`，并让 `init` 自动生成 API route。
 
 ## 疑问提交
 

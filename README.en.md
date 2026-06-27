@@ -4,7 +4,7 @@
 
 Literal I18n is a literal-string driven i18n toolkit for React and Next.js. You write real source copy in components, and the package handles AST extraction, stable key generation, locale JSON updates, and current-route runtime message loading.
 
-Current version: `0.2.5`
+Current version: `0.2.6`
 
 ## Design Philosophy
 
@@ -678,10 +678,11 @@ These helpers are optional. You can use DeepSeek, any OpenAI-compatible API, you
 
 See [CHANGELOG.md](CHANGELOG.md).
 
-Highlights in `0.2.5`:
+Highlights in `0.2.6`:
 
-- Fixed missed automatic extraction in Next.js dev when the internal watcher starts in a short-lived config process and webpack watch fallback was incorrectly skipped.
-- The `0.2.4` GUI copy search, id display, AST-unused select-all, checkbox sizing fix, and current-locale documentation remain included.
+- Restored strict current-route pruning for the initial payload, so page A does not include page B or page B/_components copy.
+- Added client route message supplements: persistent `I18nProvider` instances load and merge messages for the current pathname after soft navigation.
+- Added the default `/api/literal-i18n/messages` route handler, `literal-i18n/client-loader`, and automatic API route generation in `init`.
 
 ## Questions And Issues
 

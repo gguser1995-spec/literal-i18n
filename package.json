@@ -1,6 +1,6 @@
 {
   "name": "literal-i18n",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "Literal-string driven i18n for React and Next.js with AST extraction, hash keys, and pluggable translation hooks.",
   "keywords": [
     "i18n",
