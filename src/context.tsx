@@ -60,6 +60,7 @@ const I18nContext = createContext<I18nContextValue>({
 
 const LOCATION_CHANGE_EVENT = 'literal-i18n:location-change';
 let historyPatched = false;
+let locationChangeTimer: number | undefined;
 
 function getCurrentPathname(): string | undefined {
   if (typeof window === 'undefined') return undefined;
@@ -70,6 +71,17 @@ function dispatchLocationChange(): void {
   window.dispatchEvent(new Event(LOCATION_CHANGE_EVENT));
 }
 
+function scheduleLocationChange(): void {
+  if (locationChangeTimer !== undefined) {
+    window.clearTimeout(locationChangeTimer);
+  }
+
+  locationChangeTimer = window.setTimeout(() => {
+    locationChangeTimer = undefined;
+    dispatchLocationChange();
+  }, 0);
+}
+
 function patchHistoryOnce(): void {
   if (historyPatched || typeof window === 'undefined') return;
   historyPatched = true;
@@ -78,7 +90,7 @@ function patchHistoryOnce(): void {
     const original = window.history[method];
     window.history[method] = function patchedHistoryMethod(...args) {
       const result = original.apply(this, args);
-      dispatchLocationChange();
+      scheduleLocationChange();
       return result;
     };
   }

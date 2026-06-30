@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.6 (2026-06-27)
+## 0.2.7 (2026-06-30)
 
 ### Added
 
@@ -11,6 +11,10 @@
 ### Changed
 
 - Changed the default `getI18nProviderProps(locale)` payload scope back to strict current-route pruning. `payloadScope: "navigation"` remains available as an explicit opt-in for persistent layout client navigation, but it intentionally sends other pages in the same locale navigation tree.
+
+### Fixed
+
+- Deferred client route-change notifications from patched `history.pushState` / `history.replaceState`, preventing React from reporting `useInsertionEffect must not schedule updates` during Next.js client navigation.
 
 ### Tests
 
