@@ -15,11 +15,13 @@
 ### Fixed
 
 - Deferred client route-change notifications from patched `history.pushState` / `history.replaceState`, preventing React from reporting `useInsertionEffect must not schedule updates` during Next.js client navigation.
+- Fixed Vercel/serverless deployments missing locale JSON files by automatically adding the configured `localeDir` JSON files to Next.js `outputFileTracingIncludes`.
 
 ### Tests
 
 - Updated runtime coverage to assert that default route pruning excludes sibling route keys while explicit navigation scope includes them.
 - Added runtime coverage for the default messages API handler and client route messages loader.
+- Added runtime coverage for merging literal-i18n locale JSON files into Next.js output file tracing includes.
 
 ## 0.2.5 (2026-06-23)
 

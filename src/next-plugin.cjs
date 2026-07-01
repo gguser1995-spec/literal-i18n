@@ -8,6 +8,44 @@ const PLUGIN_NAME = 'LiteralI18nNextPlugin';
 const devWatcherByCwd = new Map();
 const WATCH_EXTENSIONS = new Set(['.js', '.jsx', '.ts', '.tsx']);
 const DEV_WATCH_POLL_INTERVAL_MS = 800;
+const DEFAULT_LOCALE_DIR = 'src/messages';
+
+function normalizeSlash(value) {
+  return String(value || '').replace(/\\/g, '/');
+}
+
+function unique(values) {
+  return Array.from(new Set(values.filter(Boolean)));
+}
+
+function resolveTracePattern(targetPath, cwd) {
+  const normalized = normalizeSlash(targetPath || DEFAULT_LOCALE_DIR);
+  const absolutePath = path.isAbsolute(normalized)
+    ? normalized
+    : path.resolve(cwd, normalized);
+  const relativePath = normalizeSlash(path.relative(cwd, absolutePath));
+
+  if (!relativePath || relativePath.startsWith('..')) {
+    return `${normalizeSlash(absolutePath)}/**/*.json`;
+  }
+
+  return `./${relativePath}/**/*.json`;
+}
+
+function mergeOutputFileTracingIncludes(nextConfig, options) {
+  const cwd = options.cwd || process.cwd();
+  const localeDirPattern = resolveTracePattern(options.localeDir || DEFAULT_LOCALE_DIR, cwd);
+  const currentIncludes = nextConfig.outputFileTracingIncludes || {};
+  const rootIncludes = currentIncludes['/*'];
+
+  return {
+    ...currentIncludes,
+    '/*': unique([
+      ...(Array.isArray(rootIncludes) ? rootIncludes : []),
+      localeDirPattern,
+    ]),
+  };
+}
 
 function isProcessAlive(pid) {
   if (!Number.isFinite(pid) || pid <= 0) return false;
@@ -357,6 +395,8 @@ function withLiteralI18n(nextConfig = {}, options = {}) {
   if (nextMajor && nextMajor >= 16 && outputConfig.turbopack === undefined) {
     outputConfig.turbopack = {};
   }
+
+  outputConfig.outputFileTracingIncludes = mergeOutputFileTracingIncludes(outputConfig, options);
 
   if (shouldStartDevWatch) {
     startDevExtractorWatch(options);

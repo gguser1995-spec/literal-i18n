@@ -310,6 +310,8 @@ npx literal-i18n extract --watch
 
 使用 `withLiteralI18n` 时，开发态默认会启动内置 watcher。它会在项目启动时扫描一次，源码变化时增量扫描一次。显式使用 `next dev --webpack` 时，默认改由 webpack watch hook 抽取；如果仍想启动时立即扫描，可以配置 `devWatch: true`。
 
+生产构建时，`withLiteralI18n` 会自动把 `localeDir` 下的 JSON 文件加入 Next.js `outputFileTracingIncludes['/*']`。这对 Vercel/serverless 部署很重要：服务端运行时会通过 `fs.readFileSync` 读取 `src/messages/{locale}.json`、`source-map.json` 和 `manifest.json`，如果没有被 Output File Tracing 打进函数包，生产环境会回退显示英文原文。
+
 ### Next.js 插件
 
 ```ts

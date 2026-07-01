@@ -310,6 +310,8 @@ npx literal-i18n extract --watch
 
 When `withLiteralI18n` is used, development mode starts the internal watcher by default. It scans once on startup and again on source changes. With explicit `next dev --webpack`, extraction uses the webpack watch hook by default; set `devWatch: true` if startup scanning is still required.
 
+In production builds, `withLiteralI18n` automatically adds JSON files under `localeDir` to Next.js `outputFileTracingIncludes['/*']`. This matters for Vercel/serverless deployments: the server runtime reads `src/messages/{locale}.json`, `source-map.json`, and `manifest.json` through `fs.readFileSync`; if Output File Tracing does not include them in the function bundle, production falls back to source English copy.
+
 ### Next.js Plugin
 
 ```ts

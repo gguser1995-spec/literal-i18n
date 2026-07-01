@@ -273,7 +273,12 @@ async function testNextPluginDevWatchFallback() {
     fs.mkdirSync(path.join(compilerCwd, 'src'), { recursive: true });
 
     const withLiteralI18n = require('../src/next-plugin.cjs');
-    const config = withLiteralI18n({}, {
+    const config = withLiteralI18n({
+      outputFileTracingIncludes: {
+        '/*': ['./existing/**/*.json'],
+        '/api/custom': ['./custom/**/*.txt'],
+      },
+    }, {
       cwd: watcherCwd,
       devWatch: true,
       keyMode: 'hash',
@@ -284,6 +289,12 @@ async function testNextPluginDevWatchFallback() {
       sourceMapOutput: 'src/messages/source-map.json',
       sourceOutput: 'src/messages/en.json',
     });
+    assert.deepEqual(config.outputFileTracingIncludes['/*'], [
+      './existing/**/*.json',
+      './src/messages/**/*.json',
+    ]);
+    assert.deepEqual(config.outputFileTracingIncludes['/api/custom'], ['./custom/**/*.txt']);
+
     const webpackConfig = config.webpack({ plugins: [] }, { dir: compilerCwd });
     assert.equal(webpackConfig.plugins.length, 1);
     assert.equal(webpackConfig.plugins[0].skipWebpackWatchExtraction, false);
@@ -291,10 +302,13 @@ async function testNextPluginDevWatchFallback() {
     const disabledConfig = withLiteralI18n({}, {
       cwd: compilerCwd,
       devWatch: false,
+      localeDir: 'app/i18n',
       sourceDir: 'src',
       sourceLocale: 'en',
       locales: ['en'],
     });
+    assert.deepEqual(disabledConfig.outputFileTracingIncludes['/*'], ['./app/i18n/**/*.json']);
+
     const disabledWebpackConfig = disabledConfig.webpack({ plugins: [] }, { dir: compilerCwd });
     assert.equal(disabledWebpackConfig.plugins[0].skipWebpackWatchExtraction, true);
   } finally {
