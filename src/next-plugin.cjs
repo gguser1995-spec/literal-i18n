@@ -9,6 +9,13 @@ const devWatcherByCwd = new Map();
 const WATCH_EXTENSIONS = new Set(['.js', '.jsx', '.ts', '.tsx']);
 const DEV_WATCH_POLL_INTERVAL_MS = 800;
 const DEFAULT_LOCALE_DIR = 'src/messages';
+const DEFAULT_CONFIG_FILES = [
+  'literal-i18n.config.mjs',
+  'literal-i18n.config.js',
+  'literal-i18n.config.cjs',
+  'literal-i18n.config.ts',
+  'literal-i18n.config.json',
+];
 
 function normalizeSlash(value) {
   return String(value || '').replace(/\\/g, '/');
@@ -32,9 +39,34 @@ function resolveTracePattern(targetPath, cwd) {
   return `./${relativePath}/**/*.json`;
 }
 
+function resolveTraceFilePattern(targetPath, cwd) {
+  const normalized = normalizeSlash(targetPath);
+  const absolutePath = path.isAbsolute(normalized)
+    ? normalized
+    : path.resolve(cwd, normalized);
+  const relativePath = normalizeSlash(path.relative(cwd, absolutePath));
+
+  if (!relativePath || relativePath.startsWith('..')) {
+    return normalizeSlash(absolutePath);
+  }
+
+  return `./${relativePath}`;
+}
+
+function resolveConfigTracePatterns(options, cwd) {
+  const configuredPath = options.configPath || options.configFile;
+  if (configuredPath) return [resolveTraceFilePattern(configuredPath, cwd)];
+
+  return DEFAULT_CONFIG_FILES
+    .map((fileName) => path.join(cwd, fileName))
+    .filter((filePath) => fs.existsSync(filePath))
+    .map((filePath) => resolveTraceFilePattern(filePath, cwd));
+}
+
 function mergeOutputFileTracingIncludes(nextConfig, options) {
   const cwd = options.cwd || process.cwd();
   const localeDirPattern = resolveTracePattern(options.localeDir || DEFAULT_LOCALE_DIR, cwd);
+  const configPatterns = resolveConfigTracePatterns(options, cwd);
   const currentIncludes = nextConfig.outputFileTracingIncludes || {};
   const rootIncludes = currentIncludes['/*'];
 
@@ -43,6 +75,7 @@ function mergeOutputFileTracingIncludes(nextConfig, options) {
     '/*': unique([
       ...(Array.isArray(rootIncludes) ? rootIncludes : []),
       localeDirPattern,
+      ...configPatterns,
     ]),
   };
 }

@@ -271,6 +271,7 @@ async function testNextPluginDevWatchFallback() {
     process.argv.push('dev');
     fs.mkdirSync(path.join(watcherCwd, 'src'), { recursive: true });
     fs.mkdirSync(path.join(compilerCwd, 'src'), { recursive: true });
+    fs.writeFileSync(path.join(watcherCwd, 'literal-i18n.config.cjs'), 'module.exports = {};\n');
 
     const withLiteralI18n = require('../src/next-plugin.cjs');
     const config = withLiteralI18n({
@@ -292,6 +293,7 @@ async function testNextPluginDevWatchFallback() {
     assert.deepEqual(config.outputFileTracingIncludes['/*'], [
       './existing/**/*.json',
       './src/messages/**/*.json',
+      './literal-i18n.config.cjs',
     ]);
     assert.deepEqual(config.outputFileTracingIncludes['/api/custom'], ['./custom/**/*.txt']);
 
@@ -301,13 +303,17 @@ async function testNextPluginDevWatchFallback() {
 
     const disabledConfig = withLiteralI18n({}, {
       cwd: compilerCwd,
+      configPath: 'config/literal-i18n.runtime.cjs',
       devWatch: false,
       localeDir: 'app/i18n',
       sourceDir: 'src',
       sourceLocale: 'en',
       locales: ['en'],
     });
-    assert.deepEqual(disabledConfig.outputFileTracingIncludes['/*'], ['./app/i18n/**/*.json']);
+    assert.deepEqual(disabledConfig.outputFileTracingIncludes['/*'], [
+      './app/i18n/**/*.json',
+      './config/literal-i18n.runtime.cjs',
+    ]);
 
     const disabledWebpackConfig = disabledConfig.webpack({ plugins: [] }, { dir: compilerCwd });
     assert.equal(disabledWebpackConfig.plugins[0].skipWebpackWatchExtraction, true);

@@ -4,6 +4,8 @@ import type { MessageIdOptions } from './id';
 
 export interface LiteralI18nPluginOptions extends MessageIdOptions {
   cwd?: string;
+  configPath?: string;
+  configFile?: string;
   sourceDir?: string | string[];
   sourceDirs?: string | string[];
   sourceOutput?: string;

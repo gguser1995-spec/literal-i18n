@@ -4,7 +4,7 @@
 
 Literal I18n is a literal-string driven i18n toolkit for React and Next.js. You write real source copy in components, and the package handles AST extraction, stable key generation, locale JSON updates, and current-route runtime message loading.
 
-Current version: `0.2.8`
+Current version: `0.2.9`
 
 ## Design Philosophy
 
@@ -310,7 +310,7 @@ npx literal-i18n extract --watch
 
 When `withLiteralI18n` is used, development mode starts the internal watcher by default. It scans once on startup and again on source changes. With explicit `next dev --webpack`, extraction uses the webpack watch hook by default; set `devWatch: true` if startup scanning is still required.
 
-In production builds, `withLiteralI18n` automatically adds JSON files under `localeDir` to Next.js `outputFileTracingIncludes['/*']`. This matters for Vercel/serverless deployments: the server runtime reads `src/messages/{locale}.json`, `source-map.json`, and `manifest.json` through `fs.readFileSync`; if Output File Tracing does not include them in the function bundle, production falls back to source English copy.
+In production builds, `withLiteralI18n` automatically adds JSON files under `localeDir` and the root `literal-i18n.config.*` file to Next.js `outputFileTracingIncludes['/*']`. This matters for Vercel/serverless deployments: the server runtime reads `src/messages/{locale}.json`, `source-map.json`, `manifest.json`, and runtime config through `fs.readFileSync`; if Output File Tracing does not include them in the function bundle, production falls back to source English copy. If your config file uses a non-default path, pass `configPath` to the plugin.
 
 ### Next.js Plugin
 
@@ -321,7 +321,11 @@ import literalI18nConfig from './literal-i18n.config';
 
 const nextConfig: NextConfig = {};
 
-export default withLiteralI18n(nextConfig, literalI18nConfig);
+export default withLiteralI18n(nextConfig, {
+  ...literalI18nConfig,
+  // Optional: only needed when the config file is not at literal-i18n.config.*.
+  // configPath: 'config/literal-i18n.config.cjs',
+});
 ```
 
 Next.js 16 should use `src/proxy.ts`:
@@ -684,7 +688,7 @@ These helpers are optional. You can use DeepSeek, any OpenAI-compatible API, you
 
 See [CHANGELOG.md](CHANGELOG.md).
 
-Highlights in `0.2.8`:
+Highlights in `0.2.9`:
 
 - Fixed `useInsertionEffect must not schedule updates` during Next.js client navigation by deferring route-supplement state updates from patched history listeners.
 - Keeps the `0.2.6` strict current-route initial payload pruning, client route message supplements, default `/api/literal-i18n/messages` route handler, and `literal-i18n/client-loader`.

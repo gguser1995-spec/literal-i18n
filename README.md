@@ -4,7 +4,7 @@
 
 Literal I18n 是一个面向 React / Next.js 的字面量国际化工具。你直接在组件里写原文，插件负责 AST 扫描、生成稳定 key、补齐语言 JSON，并在运行时按当前路由加载需要的翻译。
 
-当前版本：`0.2.8`
+当前版本：`0.2.9`
 
 ## 设计理念
 
@@ -310,7 +310,7 @@ npx literal-i18n extract --watch
 
 使用 `withLiteralI18n` 时，开发态默认会启动内置 watcher。它会在项目启动时扫描一次，源码变化时增量扫描一次。显式使用 `next dev --webpack` 时，默认改由 webpack watch hook 抽取；如果仍想启动时立即扫描，可以配置 `devWatch: true`。
 
-生产构建时，`withLiteralI18n` 会自动把 `localeDir` 下的 JSON 文件加入 Next.js `outputFileTracingIncludes['/*']`。这对 Vercel/serverless 部署很重要：服务端运行时会通过 `fs.readFileSync` 读取 `src/messages/{locale}.json`、`source-map.json` 和 `manifest.json`，如果没有被 Output File Tracing 打进函数包，生产环境会回退显示英文原文。
+生产构建时，`withLiteralI18n` 会自动把 `localeDir` 下的 JSON 文件和项目根部的 `literal-i18n.config.*` 加入 Next.js `outputFileTracingIncludes['/*']`。这对 Vercel/serverless 部署很重要：服务端运行时会通过 `fs.readFileSync` 读取 `src/messages/{locale}.json`、`source-map.json`、`manifest.json` 和运行时配置；如果没有被 Output File Tracing 打进函数包，生产环境会回退显示英文原文。配置文件如果不在默认路径，可以给插件传 `configPath`。
 
 ### Next.js 插件
 
@@ -321,7 +321,11 @@ import literalI18nConfig from './literal-i18n.config';
 
 const nextConfig: NextConfig = {};
 
-export default withLiteralI18n(nextConfig, literalI18nConfig);
+export default withLiteralI18n(nextConfig, {
+  ...literalI18nConfig,
+  // 可选：仅当配置文件不在 literal-i18n.config.* 默认路径时需要。
+  // configPath: 'config/literal-i18n.config.cjs',
+});
 ```
 
 Next.js 16 推荐使用 `src/proxy.ts`：
@@ -684,7 +688,7 @@ Next.js 16 / Turbopack 下，翻译文件更新后页面可能需要手动刷新
 
 详见 [CHANGELOG.md](CHANGELOG.md)。
 
-`0.2.8` 的重点：
+`0.2.9` 的重点：
 
 - 修复 Next.js 客户端切换页面时，补包监听同步触发状态更新导致 `useInsertionEffect must not schedule updates` 的问题。
 - 继续保留 `0.2.6` 的严格当前路由首屏剪枝、客户端路由补包、默认 `/api/literal-i18n/messages` route handler 和 `literal-i18n/client-loader`。
