@@ -4,6 +4,7 @@ import {
   createContext,
   Fragment,
   isValidElement,
+  type Context,
   type ReactNode,
   useContext,
   useEffect,
@@ -43,6 +44,9 @@ export interface I18nProviderProps extends MessageIdOptions {
   translate?: TranslateHook;
   loadMessages?: LoadMessagesHook | false;
   messageEndpoint?: string;
+  onRouteMessagesLoadingChange?: (loading: boolean) => void;
+  routeMessagesFallback?: ReactNode;
+  routeMessagesFallbackCloseDelayMs?: number;
 }
 
 export type TProps = {
@@ -54,9 +58,18 @@ export type TProps = {
 type TranslateNodeParamValue = TranslateParamValue | ReactNode;
 type TranslateNodeParams = Record<string, TranslateNodeParamValue>;
 
-const I18nContext = createContext<I18nContextValue>({
-  translate: defaultTranslate,
-});
+const I18N_CONTEXT_GLOBAL_KEY = '__literal_i18n_context__';
+
+type LiteralI18nGlobal = typeof globalThis & {
+  [I18N_CONTEXT_GLOBAL_KEY]?: Context<I18nContextValue>;
+};
+
+const literalI18nGlobal = globalThis as LiteralI18nGlobal;
+const I18nContext =
+  literalI18nGlobal[I18N_CONTEXT_GLOBAL_KEY] ??
+  (literalI18nGlobal[I18N_CONTEXT_GLOBAL_KEY] = createContext<I18nContextValue>({
+    translate: defaultTranslate,
+  }));
 
 const LOCATION_CHANGE_EVENT = 'literal-i18n:location-change';
 let historyPatched = false;
@@ -122,13 +135,43 @@ export function I18nProvider({
   idLength,
   loadMessages: routeMessagesLoader,
   messageEndpoint,
+  onRouteMessagesLoadingChange,
+  routeMessagesFallback,
+  routeMessagesFallbackCloseDelayMs = 0,
 }: I18nProviderProps) {
   const [runtimeMessages, setRuntimeMessages] = useState<TranslationMessages | null | undefined>(messages);
   const [pathname, setPathname] = useState<string | undefined>(() => getCurrentPathname());
+  const [routeMessagesLoading, setRouteMessagesLoading] = useState(false);
   const lastLoadedPathnameRef = useRef<string | undefined>(pathname);
+  const loadedPathnamesRef = useRef<Set<string>>(new Set(pathname ? [pathname] : []));
+  const activeRouteLoadRef = useRef<symbol | null>(null);
+  const closeFallbackTimerRef = useRef<number | undefined>(undefined);
+
+  function clearCloseFallbackTimer() {
+    if (closeFallbackTimerRef.current === undefined) return;
+    window.clearTimeout(closeFallbackTimerRef.current);
+    closeFallbackTimerRef.current = undefined;
+  }
+
+  function closeRouteMessagesLoading() {
+    clearCloseFallbackTimer();
+    const delayMs = Math.max(0, routeMessagesFallbackCloseDelayMs);
+    if (delayMs === 0 || typeof window === 'undefined') {
+      setRouteMessagesLoading(false);
+      return;
+    }
+
+    closeFallbackTimerRef.current = window.setTimeout(() => {
+      closeFallbackTimerRef.current = undefined;
+      setRouteMessagesLoading(false);
+    }, delayMs);
+  }
 
   useEffect(() => {
     setRuntimeMessages(messages);
+    loadedPathnamesRef.current = new Set(pathname ? [pathname] : []);
+    activeRouteLoadRef.current = null;
+    closeRouteMessagesLoading();
   }, [messages]);
 
   useEffect(() => {
@@ -136,20 +179,41 @@ export function I18nProvider({
   }, []);
 
   useEffect(() => {
-    if (routeMessagesLoader === false || !pathname) return;
-    if (lastLoadedPathnameRef.current === pathname) return;
+    return () => clearCloseFallbackTimer();
+  }, []);
+
+  useEffect(() => {
+    onRouteMessagesLoadingChange?.(routeMessagesLoading);
+  }, [onRouteMessagesLoadingChange, routeMessagesLoading]);
+
+  useEffect(() => {
+    if (
+      routeMessagesLoader === false ||
+      !pathname ||
+      lastLoadedPathnameRef.current === pathname ||
+      loadedPathnamesRef.current.has(pathname)
+    ) {
+      activeRouteLoadRef.current = null;
+      closeRouteMessagesLoading();
+      return;
+    }
 
     lastLoadedPathnameRef.current = pathname;
+    const loadId = Symbol(pathname);
+    activeRouteLoadRef.current = loadId;
     const loader = routeMessagesLoader ?? ((nextLocale, nextPathname) => (
       loadMessagesFromEndpoint(nextLocale, nextPathname, messageEndpoint)
     ));
     let cancelled = false;
 
+    clearCloseFallbackTimer();
+    setRouteMessagesLoading(true);
     loader(locale, pathname)
       .then((payload) => {
-        if (cancelled) return;
+        if (cancelled || activeRouteLoadRef.current !== loadId) return;
         const loadedMessages = normalizeLoadedMessages(payload);
         if (!loadedMessages) return;
+        loadedPathnamesRef.current.add(pathname);
         setRuntimeMessages((currentMessages) => ({
           ...(currentMessages ?? {}),
           ...loadedMessages,
@@ -158,6 +222,11 @@ export function I18nProvider({
       .catch(() => {
         // Route message loading is a progressive enhancement. Existing messages
         // keep rendering if the endpoint is missing or the network fails.
+      })
+      .finally(() => {
+        if (cancelled || activeRouteLoadRef.current !== loadId) return;
+        activeRouteLoadRef.current = null;
+        closeRouteMessagesLoading();
       });
 
     return () => {
@@ -172,7 +241,11 @@ export function I18nProvider({
     };
   }, [idLength, idPrefix, keyMode, locale, runtimeMessages, sourceMap, translate]);
 
-  return <I18nContext.Provider value={contextValue}>{children}</I18nContext.Provider>;
+  const renderedChildren = routeMessagesLoading && routeMessagesFallback !== undefined
+    ? routeMessagesFallback
+    : children;
+
+  return <I18nContext.Provider value={contextValue}>{renderedChildren}</I18nContext.Provider>;
 }
 
 export function useTranslate(): UseTranslateResult {

@@ -4,7 +4,7 @@
 
 Literal I18n 是一个面向 React / Next.js 的字面量国际化工具。你直接在组件里写原文，插件负责 AST 扫描、生成稳定 key、补齐语言 JSON，并在运行时按当前路由加载需要的翻译。
 
-当前版本：`0.2.7`
+当前版本：`0.2.8`
 
 ## 设计理念
 
@@ -386,7 +386,7 @@ export function middleware(request: NextRequest) {
 
 默认情况下，`getI18nProviderProps(locale)` 只返回当前 pathname 匹配路由需要的 messages。页面 A 的首屏 HTML/RSC payload 不会包含页面 B 或页面 B/_components 的翻译。
 
-如果 `I18nProvider` 放在持久 layout 中，客户端从页面 A 软跳到页面 B 时，Provider 会默认通过 `/api/literal-i18n/messages?locale=zh&pathname=/zh/create` 补充当前路由 messages，并与已有 messages 合并。这样首屏仍然严格裁剪，软跳后也不会回退成原文。
+如果 `I18nProvider` 放在持久 layout 中，客户端从页面 A 软跳到页面 B 时，Provider 会默认通过 `/api/literal-i18n/messages?locale=zh&pathname=/zh/create` 补充当前路由 messages，并与已有 messages 合并。这样首屏仍然严格裁剪；如果担心软跳补包期间出现短暂原文，可以使用 loading 回调或 fallback 遮住过渡阶段。
 
 `init` 会自动生成默认 API route。已有项目可以手动添加：
 
@@ -403,12 +403,15 @@ export { literalI18nMessagesGET as GET } from 'literal-i18n/server';
   loadMessages={(locale, pathname) =>
     fetch(`/custom/messages?locale=${locale}&pathname=${pathname}`).then((res) => res.json())
   }
+  onRouteMessagesLoadingChange={(loading) => setLoading(loading)}
+  routeMessagesFallback={<PageLoading />}
+  routeMessagesFallbackCloseDelayMs={150}
 >
   {children}
 </I18nProvider>
 ```
 
-如果只是改默认 endpoint，可以传 `messageEndpoint="/custom/messages"`。
+如果只是改默认 endpoint，可以传 `messageEndpoint="/custom/messages"`。`routeMessagesFallback` 会在软跳补包期间替换 children；`routeMessagesFallbackCloseDelayMs` 控制补包完成后 fallback 延迟关闭时间，默认 `0`。如果你想做全局遮罩并保留 children 挂载状态，可以只使用 `onRouteMessagesLoadingChange` 自己渲染 overlay。
 
 当以下条件同时满足时，`getI18nProviderProps(locale)` 会根据 manifest 裁剪 messages：
 
@@ -595,6 +598,7 @@ Next.js 16 / Turbopack 下，翻译文件更新后页面可能需要手动刷新
 - `useTranslate()`：返回 `{ locale, tr }`。
 - `useI18n()`：返回 `{ locale, translate }`。
 - `loadMessages(locale, pathname)`：客户端默认路由补包 loader，请求 `/api/literal-i18n/messages`。
+- `onRouteMessagesLoadingChange` / `routeMessagesFallback`：`I18nProvider` 的软跳补包 loading 回调与 fallback。
 - `DEFAULT_MESSAGE_ENDPOINT`
 - `createTranslator(options)`
 - `createMessageId(text, options)`
@@ -680,7 +684,7 @@ Next.js 16 / Turbopack 下，翻译文件更新后页面可能需要手动刷新
 
 详见 [CHANGELOG.md](CHANGELOG.md)。
 
-`0.2.7` 的重点：
+`0.2.8` 的重点：
 
 - 修复 Next.js 客户端切换页面时，补包监听同步触发状态更新导致 `useInsertionEffect must not schedule updates` 的问题。
 - 继续保留 `0.2.6` 的严格当前路由首屏剪枝、客户端路由补包、默认 `/api/literal-i18n/messages` route handler 和 `literal-i18n/client-loader`。

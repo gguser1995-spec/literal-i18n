@@ -4,7 +4,7 @@
 
 Literal I18n is a literal-string driven i18n toolkit for React and Next.js. You write real source copy in components, and the package handles AST extraction, stable key generation, locale JSON updates, and current-route runtime message loading.
 
-Current version: `0.2.7`
+Current version: `0.2.8`
 
 ## Design Philosophy
 
@@ -386,7 +386,7 @@ Extraction generates `src/messages/manifest.json`, which records App Router rout
 
 By default, `getI18nProviderProps(locale)` returns only the messages needed by the route that matches the current pathname. Page A's initial HTML/RSC payload will not include translations from page B or page B/_components.
 
-If `I18nProvider` lives in a persistent layout, a client navigation from page A to page B uses `/api/literal-i18n/messages?locale=zh&pathname=/zh/create` by default to supplement the current route messages and merge them into the existing provider state. This keeps the initial payload strictly pruned while avoiding source-text fallback after soft navigation.
+If `I18nProvider` lives in a persistent layout, a client navigation from page A to page B uses `/api/literal-i18n/messages?locale=zh&pathname=/zh/create` by default to supplement the current route messages and merge them into the existing provider state. This keeps the initial payload strictly pruned; if you want to hide the brief route-message supplement phase, use the loading callback or fallback.
 
 `init` creates the default API route automatically. Existing projects can add it manually:
 
@@ -403,12 +403,15 @@ Use a custom loader when you need your own auth, cache, or gateway behavior:
   loadMessages={(locale, pathname) =>
     fetch(`/custom/messages?locale=${locale}&pathname=${pathname}`).then((res) => res.json())
   }
+  onRouteMessagesLoadingChange={(loading) => setLoading(loading)}
+  routeMessagesFallback={<PageLoading />}
+  routeMessagesFallbackCloseDelayMs={150}
 >
   {children}
 </I18nProvider>
 ```
 
-If you only need to change the default endpoint, pass `messageEndpoint="/custom/messages"`.
+If you only need to change the default endpoint, pass `messageEndpoint="/custom/messages"`. `routeMessagesFallback` replaces children while route messages are loading; `routeMessagesFallbackCloseDelayMs` controls how long the fallback stays visible after route messages finish loading, defaulting to `0`. If you want a global overlay while keeping children mounted, use `onRouteMessagesLoadingChange` and render the overlay yourself.
 
 `getI18nProviderProps(locale)` prunes messages through the manifest when:
 
@@ -595,6 +598,7 @@ In Next.js 16 / Turbopack, translation file updates may require a manual page re
 - `useTranslate()`: returns `{ locale, tr }`.
 - `useI18n()`: returns `{ locale, translate }`.
 - `loadMessages(locale, pathname)`: default client route supplement loader, requesting `/api/literal-i18n/messages`.
+- `onRouteMessagesLoadingChange` / `routeMessagesFallback`: `I18nProvider` soft-navigation route-message loading callback and fallback.
 - `DEFAULT_MESSAGE_ENDPOINT`
 - `createTranslator(options)`
 - `createMessageId(text, options)`
@@ -680,7 +684,7 @@ These helpers are optional. You can use DeepSeek, any OpenAI-compatible API, you
 
 See [CHANGELOG.md](CHANGELOG.md).
 
-Highlights in `0.2.7`:
+Highlights in `0.2.8`:
 
 - Fixed `useInsertionEffect must not schedule updates` during Next.js client navigation by deferring route-supplement state updates from patched history listeners.
 - Keeps the `0.2.6` strict current-route initial payload pruning, client route message supplements, default `/api/literal-i18n/messages` route handler, and `literal-i18n/client-loader`.
