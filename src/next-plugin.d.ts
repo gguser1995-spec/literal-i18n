@@ -6,6 +6,8 @@ export interface LiteralI18nPluginOptions extends MessageIdOptions {
   cwd?: string;
   configPath?: string;
   configFile?: string;
+  publicRuntime?: boolean;
+  publicRuntimeDir?: string;
   sourceDir?: string | string[];
   sourceDirs?: string | string[];
   sourceOutput?: string;

@@ -7,9 +7,11 @@ import type { MessageIdOptions } from './id';
 import type { I18nProviderProps } from './context';
 
 const NEXT_INTL_LOCALE_HEADER = 'X-NEXT-INTL-LOCALE';
+const LITERAL_I18N_LOCALE_HEADER = 'x-literal-i18n-locale';
 const LITERAL_I18N_PATHNAME_HEADER = 'x-literal-i18n-pathname';
 const DEFAULT_MESSAGES_API_PATHNAME = '/api/literal-i18n/messages';
 const DEFAULT_LOCALE_DIR = 'src/messages';
+const DEFAULT_PUBLIC_RUNTIME_DIR = 'literal-i18n/messages';
 const DEFAULT_MANIFEST_FILE = 'manifest.json';
 const CONFIG_FILES = [
   'literal-i18n.config.mjs',
@@ -27,6 +29,8 @@ export interface LocaleTranslator {
 
 export interface ServerTranslatorOptions extends MessageIdOptions {
   localeDir?: string;
+  publicRuntime?: boolean;
+  publicRuntimeDir?: string;
   sourceMap?: TranslationMessages | null;
 }
 
@@ -44,6 +48,10 @@ export interface GetTranslatorInput extends ServerTranslatorOptions {
 
 export interface LiteralI18nRuntimeConfig extends MessageIdOptions {
   localeDir?: string;
+  publicRuntime?: boolean;
+  publicRuntimeDir?: string;
+  locales?: string[];
+  sourceLocale?: string;
 }
 
 export type I18nProviderRuntimeProps = Omit<I18nProviderProps, 'children' | 'translate'>;
@@ -62,6 +70,7 @@ export interface LiteralI18nManifest {
   version?: number;
   files?: Record<string, string[] | LiteralI18nManifestFile>;
   routes?: Record<string, string[]>;
+  clientKeys?: string[];
 }
 
 interface JsonCacheEntry<T> {
@@ -76,6 +85,13 @@ function normalizeConfigOptions(config: Record<string, unknown> | null | undefin
   const normalized: LiteralI18nRuntimeConfig = {};
 
   if (typeof config?.localeDir === 'string') normalized.localeDir = config.localeDir;
+  if (typeof config?.publicRuntime === 'boolean') normalized.publicRuntime = config.publicRuntime;
+  if (typeof config?.publicRuntimeDir === 'string') normalized.publicRuntimeDir = config.publicRuntimeDir;
+  if (Array.isArray(config?.locales)) {
+    const locales = config.locales.filter((locale): locale is string => typeof locale === 'string' && locale.length > 0);
+    if (locales.length > 0) normalized.locales = Array.from(new Set(locales));
+  }
+  if (typeof config?.sourceLocale === 'string') normalized.sourceLocale = config.sourceLocale;
   if (config?.keyMode === 'hash' || config?.keyMode === 'source') normalized.keyMode = config.keyMode;
   if (typeof config?.idPrefix === 'string') normalized.idPrefix = config.idPrefix;
   if (typeof config?.idLength === 'number' && Number.isFinite(config.idLength)) {
@@ -171,6 +187,20 @@ function extractConfigFromSource(cwd: string): LiteralI18nRuntimeConfig {
     const localeDir = src.match(/localeDir\s*[=:]\s*['"]([^'"]+)['"]/);
     if (localeDir) config.localeDir = localeDir[1];
 
+    const publicRuntime = src.match(/publicRuntime\s*[=:]\s*(true|false)/);
+    if (publicRuntime) config.publicRuntime = publicRuntime[1] === 'true';
+
+    const publicRuntimeDir = src.match(/publicRuntimeDir\s*[=:]\s*['"]([^'"]+)['"]/);
+    if (publicRuntimeDir) config.publicRuntimeDir = publicRuntimeDir[1];
+
+    const sourceLocale = src.match(/sourceLocale\s*[=:]\s*['"]([^'"]+)['"]/);
+    if (sourceLocale) config.sourceLocale = sourceLocale[1];
+
+    const locales = src.match(/locales\s*[=:]\s*\[([^\]]+)\]/);
+    if (locales) {
+      config.locales = Array.from(locales[1].matchAll(/['"]([^'"]+)['"]/g), (match) => match[1]);
+    }
+
     const keyMode = src.match(/keyMode\s*[=:]\s*['"]([^'"]+)['"]/);
     if (keyMode && keyMode[1] === 'hash') config.keyMode = 'hash';
 
@@ -199,6 +229,15 @@ function mergeRuntimeOptions<T extends ServerTranslatorOptions>(
 
 function resolveLocaleDir(localeDir?: string): string {
   return path.resolve(process.cwd(), localeDir ?? DEFAULT_LOCALE_DIR);
+}
+
+function resolvePublicRuntimeDir(publicRuntimeDir?: string): string {
+  const normalized = (publicRuntimeDir ?? DEFAULT_PUBLIC_RUNTIME_DIR).replace(/^\/+/, '');
+  return path.resolve(process.cwd(), 'public', normalized);
+}
+
+function isProductionRuntime(): boolean {
+  return process.env.NODE_ENV === 'production';
 }
 
 function normalizePathname(pathname: string | null | undefined): string | undefined {
@@ -344,6 +383,10 @@ function selectManifestKeys(
 
   if (!hasRouteMatch) return keys;
 
+  for (const key of manifest.clientKeys ?? []) {
+    keys.add(key);
+  }
+
   for (const [pattern, routeKeys] of routeEntries) {
     const shouldInclude = payloadScope === 'navigation'
       ? routeSharesNavigationScope(pattern, pathname, locale)
@@ -399,16 +442,17 @@ async function getHeaderValue(name: string): Promise<string | undefined> {
 
 export class MessageStore {
   readonly localeDir: string;
+  readonly publicRuntimeDir?: string;
   private readonly jsonCache = new Map<string, JsonCacheEntry<TranslationMessages | LiteralI18nManifest>>();
 
-  constructor(localeDir?: string) {
+  constructor(localeDir?: string, publicRuntimeDir?: string, publicRuntime = true) {
     this.localeDir = resolveLocaleDir(localeDir);
+    this.publicRuntimeDir = publicRuntime === false ? undefined : resolvePublicRuntimeDir(publicRuntimeDir);
   }
 
-  private readJson<T extends TranslationMessages | LiteralI18nManifest>(
+  private readJsonFile<T extends TranslationMessages | LiteralI18nManifest>(
     filePath: string,
-    fallback: T,
-  ): T {
+  ): T | undefined {
     try {
       const fileStat = statSync(filePath);
       const signature = `${fileStat.mtimeMs}:${fileStat.size}`;
@@ -420,20 +464,40 @@ export class MessageStore {
       this.jsonCache.set(filePath, { signature, value });
       return value;
     } catch {
-      return fallback;
+      return undefined;
     }
   }
 
+  private readRuntimeJson<T extends TranslationMessages | LiteralI18nManifest>(
+    fileName: string,
+    fallback: T,
+  ): T {
+    const localeFile = path.join(this.localeDir, fileName);
+    const publicRuntimeFile = this.publicRuntimeDir
+      ? path.join(this.publicRuntimeDir, fileName)
+      : undefined;
+
+    if (isProductionRuntime() && publicRuntimeFile) {
+      return this.readJsonFile<T>(publicRuntimeFile) ??
+        this.readJsonFile<T>(localeFile) ??
+        fallback;
+    }
+
+    return this.readJsonFile<T>(localeFile) ??
+      (publicRuntimeFile ? this.readJsonFile<T>(publicRuntimeFile) : undefined) ??
+      fallback;
+  }
+
   loadMessages(locale: string): Promise<TranslationMessages> {
-    return Promise.resolve(this.readJson(path.join(this.localeDir, `${locale}.json`), {}));
+    return Promise.resolve(this.readRuntimeJson(`${locale}.json`, {}));
   }
 
   loadSourceMap(): Promise<TranslationMessages> {
-    return Promise.resolve(this.readJson(path.join(this.localeDir, 'source-map.json'), {}));
+    return Promise.resolve(this.readRuntimeJson('source-map.json', {}));
   }
 
   loadManifest(): Promise<LiteralI18nManifest> {
-    return Promise.resolve(this.readJson(path.join(this.localeDir, DEFAULT_MANIFEST_FILE), {}));
+    return Promise.resolve(this.readRuntimeJson(DEFAULT_MANIFEST_FILE, {}));
   }
 
   async loadMessagesForPathname(
@@ -454,13 +518,19 @@ export class MessageStore {
   }
 }
 
-export function getMessageStore(localeDir?: string): MessageStore {
+export function getMessageStore(
+  localeDir?: string,
+  publicRuntimeDir?: string,
+  publicRuntime = true,
+): MessageStore {
   const resolvedLocaleDir = resolveLocaleDir(localeDir);
-  const existing = messageStores.get(resolvedLocaleDir);
+  const resolvedPublicRuntimeDir = publicRuntime === false ? '' : resolvePublicRuntimeDir(publicRuntimeDir);
+  const storeKey = `${resolvedLocaleDir}\n${resolvedPublicRuntimeDir}`;
+  const existing = messageStores.get(storeKey);
   if (existing) return existing;
 
-  const store = new MessageStore(localeDir);
-  messageStores.set(resolvedLocaleDir, store);
+  const store = new MessageStore(localeDir, publicRuntimeDir, publicRuntime);
+  messageStores.set(storeKey, store);
   return store;
 }
 
@@ -469,25 +539,51 @@ export async function loadMessages(
   localeDir?: string,
 ): Promise<TranslationMessages> {
   const config = localeDir ? {} : await loadLiteralI18nConfig();
-  return getMessageStore(localeDir ?? config.localeDir).loadMessages(locale);
+  return getMessageStore(
+    localeDir ?? config.localeDir,
+    config.publicRuntimeDir,
+    config.publicRuntime,
+  ).loadMessages(locale);
 }
 
 export async function loadSourceMap(
   localeDir?: string,
 ): Promise<TranslationMessages> {
   const config = localeDir ? {} : await loadLiteralI18nConfig();
-  return getMessageStore(localeDir ?? config.localeDir).loadSourceMap();
+  return getMessageStore(
+    localeDir ?? config.localeDir,
+    config.publicRuntimeDir,
+    config.publicRuntime,
+  ).loadSourceMap();
 }
 
 export async function loadLiteralI18nManifest(
   localeDir?: string,
 ): Promise<LiteralI18nManifest> {
   const config = localeDir ? {} : await loadLiteralI18nConfig();
-  return getMessageStore(localeDir ?? config.localeDir).loadManifest();
+  return getMessageStore(
+    localeDir ?? config.localeDir,
+    config.publicRuntimeDir,
+    config.publicRuntime,
+  ).loadManifest();
 }
 
-async function getRequestLocaleFromHeaders(): Promise<string | undefined> {
-  return getHeaderValue(NEXT_INTL_LOCALE_HEADER);
+function normalizeLocaleCandidate(
+  locale: string | undefined,
+  config: LiteralI18nRuntimeConfig,
+): string | undefined {
+  if (!locale) return undefined;
+  if (Array.isArray(config.locales) && config.locales.length > 0 && !config.locales.includes(locale)) {
+    return undefined;
+  }
+  return locale;
+}
+
+async function getRequestLocaleFromHeaders(config: LiteralI18nRuntimeConfig = {}): Promise<string | undefined> {
+  return normalizeLocaleCandidate(await getHeaderValue(LITERAL_I18N_LOCALE_HEADER), config) ??
+    normalizeLocaleCandidate(await getHeaderValue(NEXT_INTL_LOCALE_HEADER), config) ??
+    normalizeLocaleCandidate(splitRouteSegments(await getRequestPathnameFromHeaders() ?? '')[0], config) ??
+    config.sourceLocale;
 }
 
 async function getRequestPathnameFromHeaders(): Promise<string | undefined> {
@@ -497,12 +593,16 @@ async function getRequestPathnameFromHeaders(): Promise<string | undefined> {
 export async function getTranslator(
   input?: GetTranslatorInput,
 ): Promise<LocaleTranslator> {
-  const locale = input?.locale ?? (await getRequestLocaleFromHeaders()) ?? 'en';
   const config = await loadLiteralI18nConfig();
+  const locale = input?.locale ?? (await getRequestLocaleFromHeaders(config)) ?? 'en';
   const runtimeOptions = mergeRuntimeOptions(config, input);
-  const localeDir = runtimeOptions.localeDir;
-  const messages = input?.messages ?? await loadMessages(locale, localeDir);
-  const sourceMap = input?.sourceMap ?? await loadSourceMap(localeDir);
+  const store = getMessageStore(
+    runtimeOptions.localeDir,
+    runtimeOptions.publicRuntimeDir,
+    runtimeOptions.publicRuntime,
+  );
+  const messages = input?.messages ?? await store.loadMessages(locale);
+  const sourceMap = input?.sourceMap ?? await store.loadSourceMap();
 
   return {
     locale,
@@ -522,8 +622,13 @@ export async function getLocaleTranslator(
 ): Promise<LocaleTranslator> {
   const config = await loadLiteralI18nConfig();
   const runtimeOptions = mergeRuntimeOptions(config, options);
-  const messages = await loadMessages(locale, runtimeOptions.localeDir);
-  const sourceMap = runtimeOptions.sourceMap ?? await loadSourceMap(runtimeOptions.localeDir);
+  const store = getMessageStore(
+    runtimeOptions.localeDir,
+    runtimeOptions.publicRuntimeDir,
+    runtimeOptions.publicRuntime,
+  );
+  const messages = await store.loadMessages(locale);
+  const sourceMap = runtimeOptions.sourceMap ?? await store.loadSourceMap();
 
   return {
     locale,
@@ -543,7 +648,11 @@ export async function getI18nProviderProps(
 ): Promise<I18nProviderRuntimeProps> {
   const config = await loadLiteralI18nConfig();
   const runtimeOptions = mergeRuntimeOptions(config, options);
-  const store = getMessageStore(runtimeOptions.localeDir);
+  const store = getMessageStore(
+    runtimeOptions.localeDir,
+    runtimeOptions.publicRuntimeDir,
+    runtimeOptions.publicRuntime,
+  );
   const pathname = options.pathname ?? await getRequestPathnameFromHeaders();
   const payloadScope = runtimeOptions.payloadScope ?? 'route';
   const messages = runtimeOptions.optimizePayload === false
@@ -582,7 +691,9 @@ function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
 
 export async function literalI18nMessagesGET(request: Request): Promise<Response> {
   const url = new URL(request.url);
-  const locale = url.searchParams.get('locale') ?? await getRequestLocaleFromHeaders();
+  const config = await loadLiteralI18nConfig();
+  const locale = normalizeLocaleCandidate(url.searchParams.get('locale') ?? undefined, config) ??
+    await getRequestLocaleFromHeaders(config);
   const pathname = url.searchParams.get('pathname') ?? url.searchParams.get('path') ?? '/';
 
   if (!locale) {

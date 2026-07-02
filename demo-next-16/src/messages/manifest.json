@@ -8,6 +8,38 @@
         "m_8c0ae2a9ea241b89"
       ]
     },
+    "src/app/[locale]/create/create-client-note.tsx": {
+      "keys": [
+        "m_512855bd3a880c6c"
+      ]
+    },
+    "src/app/[locale]/create/page.tsx": {
+      "keys": [
+        "m_149023792cf28712",
+        "m_512855bd3a880c6c",
+        "m_e92f37f8713ee48f"
+      ],
+      "route": {
+        "pattern": "/[locale]/create",
+        "kind": "page"
+      }
+    },
+    "src/app/[locale]/layout-shell.tsx": {
+      "keys": [
+        "m_24ccc7457bccbbd0",
+        "m_a1655b6ebbf6b34c"
+      ]
+    },
+    "src/app/[locale]/layout.tsx": {
+      "keys": [
+        "m_24ccc7457bccbbd0",
+        "m_a1655b6ebbf6b34c"
+      ],
+      "route": {
+        "pattern": "/[locale]",
+        "kind": "layout"
+      }
+    },
     "src/app/[locale]/page.tsx": {
       "keys": [
         "m_0436f27cccf7979f",
@@ -26,6 +58,11 @@
     }
   },
   "routes": {
+    "/[locale]/create": [
+      "m_149023792cf28712",
+      "m_512855bd3a880c6c",
+      "m_e92f37f8713ee48f"
+    ],
     "/[locale]": [
       "m_0436f27cccf7979f",
       "m_073083b5b1d08690",
@@ -36,5 +73,13 @@
       "m_c17a84d426eee4e1",
       "m_f00293ce918bba28"
     ]
-  }
+  },
+  "clientKeys": [
+    "m_24ccc7457bccbbd0",
+    "m_2a8995faed7333b6",
+    "m_34931f286b66d0d4",
+    "m_512855bd3a880c6c",
+    "m_8c0ae2a9ea241b89",
+    "m_a1655b6ebbf6b34c"
+  ]
 }

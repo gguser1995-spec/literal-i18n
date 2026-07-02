@@ -9,6 +9,7 @@ const devWatcherByCwd = new Map();
 const WATCH_EXTENSIONS = new Set(['.js', '.jsx', '.ts', '.tsx']);
 const DEV_WATCH_POLL_INTERVAL_MS = 800;
 const DEFAULT_LOCALE_DIR = 'src/messages';
+const DEFAULT_PUBLIC_RUNTIME_DIR = 'literal-i18n/messages';
 const DEFAULT_CONFIG_FILES = [
   'literal-i18n.config.mjs',
   'literal-i18n.config.js',
@@ -78,6 +79,94 @@ function mergeOutputFileTracingIncludes(nextConfig, options) {
       ...configPatterns,
     ]),
   };
+}
+
+function resolveProjectPath(cwd, targetPath) {
+  return path.isAbsolute(targetPath)
+    ? targetPath
+    : path.resolve(cwd, targetPath);
+}
+
+function shouldSyncPublicRuntime(options) {
+  return options.publicRuntime !== false;
+}
+
+function resolvePublicRuntimeDir(cwd, options) {
+  const publicRuntimeDir = normalizeSlash(options.publicRuntimeDir || DEFAULT_PUBLIC_RUNTIME_DIR).replace(/^\/+/, '');
+  return path.resolve(cwd, 'public', publicRuntimeDir);
+}
+
+function collectJsonFiles(dir) {
+  let entries = [];
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+
+  const files = [];
+  for (const entry of entries) {
+    const entryPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...collectJsonFiles(entryPath));
+      continue;
+    }
+
+    if (entry.isFile() && entry.name.endsWith('.json')) {
+      files.push(entryPath);
+    }
+  }
+
+  return files;
+}
+
+function addRuntimeJsonFile(files, cwd, filePath, fallbackName) {
+  if (!filePath || filePath === false) return;
+  const absolutePath = resolveProjectPath(cwd, filePath);
+  try {
+    const stat = fs.statSync(absolutePath);
+    if (!stat.isFile() || !absolutePath.endsWith('.json')) return;
+    files.set(fallbackName || path.basename(absolutePath), absolutePath);
+  } catch {
+    // Missing optional runtime files are ignored until extraction creates them.
+  }
+}
+
+function collectRuntimeJsonFiles(options, cwd, localeDir) {
+  const files = new Map();
+  for (const filePath of collectJsonFiles(localeDir)) {
+    files.set(path.relative(localeDir, filePath), filePath);
+  }
+
+  addRuntimeJsonFile(files, cwd, options.sourceOutput, path.basename(options.sourceOutput || ''));
+  addRuntimeJsonFile(files, cwd, options.sourceMapOutput, 'source-map.json');
+  addRuntimeJsonFile(files, cwd, options.manifestOutput, 'manifest.json');
+
+  if (typeof options.localeOutput === 'function' && Array.isArray(options.locales)) {
+    for (const locale of options.locales) {
+      addRuntimeJsonFile(files, cwd, options.localeOutput(locale), `${locale}.json`);
+    }
+  }
+
+  return files;
+}
+
+function syncPublicRuntimeMessages(options = {}, cwd = process.cwd()) {
+  if (!shouldSyncPublicRuntime(options)) return;
+
+  const localeDir = resolveProjectPath(cwd, options.localeDir || DEFAULT_LOCALE_DIR);
+  const publicRuntimeDir = resolvePublicRuntimeDir(cwd, options);
+  if (localeDir === publicRuntimeDir) return;
+
+  const jsonFiles = collectRuntimeJsonFiles(options, cwd, localeDir);
+  if (jsonFiles.size === 0) return;
+
+  fs.rmSync(publicRuntimeDir, { recursive: true, force: true });
+  for (const [relativePath, filePath] of jsonFiles) {
+    const targetPath = path.join(publicRuntimeDir, relativePath);
+    fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+    fs.copyFileSync(filePath, targetPath);
+  }
 }
 
 function isProcessAlive(pid) {
@@ -252,7 +341,15 @@ function startDevExtractorWatch(options = {}) {
   let isScanning = false;
 
   const enqueue = (task) => {
-    running = running.then(task, task);
+    running = running.then(async () => {
+      const result = await task();
+      syncPublicRuntimeMessages(options, cwd);
+      return result;
+    }, async () => {
+      const result = await task();
+      syncPublicRuntimeMessages(options, cwd);
+      return result;
+    });
     return running;
   };
   const flush = async () => {
@@ -358,6 +455,7 @@ class LiteralI18nNextPlugin {
   enqueue(task) {
     this.running = this.running.then(async () => {
       const result = await task();
+      syncPublicRuntimeMessages(this.options, this.currentCwd || process.cwd());
       const localeChanged = result?.localeResults?.some((localeResult) => localeResult.changed);
       if (result?.sourceChanged || localeChanged) {
         this.ignoreWatchUntil = Date.now() + 1000;
@@ -369,6 +467,7 @@ class LiteralI18nNextPlugin {
 
   apply(compiler) {
     const cwd = compiler.context || process.cwd();
+    this.currentCwd = cwd;
     const extractor = this.getExtractor(cwd);
 
     compiler.hooks.beforeRun.tapPromise(PLUGIN_NAME, async () => {
@@ -429,7 +528,11 @@ function withLiteralI18n(nextConfig = {}, options = {}) {
     outputConfig.turbopack = {};
   }
 
-  outputConfig.outputFileTracingIncludes = mergeOutputFileTracingIncludes(outputConfig, options);
+  if (options.publicRuntime === false) {
+    outputConfig.outputFileTracingIncludes = mergeOutputFileTracingIncludes(outputConfig, options);
+  }
+
+  syncPublicRuntimeMessages(options, options.cwd || process.cwd());
 
   if (shouldStartDevWatch) {
     startDevExtractorWatch(options);

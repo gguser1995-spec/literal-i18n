@@ -8,6 +8,38 @@
         "Language"
       ]
     },
+    "src/app/[locale]/create/create-client-note.tsx": {
+      "keys": [
+        "Client create panel is ready."
+      ]
+    },
+    "src/app/[locale]/create/page.tsx": {
+      "keys": [
+        "Client create panel is ready.",
+        "Compose a new track from a short idea.",
+        "Create music"
+      ],
+      "route": {
+        "pattern": "/[locale]/create",
+        "kind": "page"
+      }
+    },
+    "src/app/[locale]/layout-shell.tsx": {
+      "keys": [
+        "Create",
+        "Home"
+      ]
+    },
+    "src/app/[locale]/layout.tsx": {
+      "keys": [
+        "Create",
+        "Home"
+      ],
+      "route": {
+        "pattern": "/[locale]",
+        "kind": "layout"
+      }
+    },
     "src/app/[locale]/page.tsx": {
       "keys": [
         "Hello World",
@@ -24,6 +56,11 @@
     }
   },
   "routes": {
+    "/[locale]/create": [
+      "Client create panel is ready.",
+      "Compose a new track from a short idea.",
+      "Create music"
+    ],
     "/[locale]": [
       "Hello World",
       "Hello {name}",
@@ -32,5 +69,13 @@
       "This is a server component",
       "Welcome to Literal I18n Demo"
     ]
-  }
+  },
+  "clientKeys": [
+    "Client create panel is ready.",
+    "Create",
+    "Hello {name}",
+    "Home",
+    "Items count: {count}",
+    "Language"
+  ]
 }

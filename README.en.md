@@ -99,6 +99,13 @@ export default async function LocaleLayout({
 }
 ```
 
+The same `import { T } from 'literal-i18n'` selects the correct runtime automatically:
+
+- In Server Components, `<T />` uses the server implementation and emits translated text during RSC rendering.
+- In Client Components, `<T />` uses the client implementation and reads messages from `I18nProvider`.
+
+During client navigation, Server Component copy now arrives with the target route's RSC payload instead of waiting for a separate client supplement request.
+
 Get the current locale:
 
 ```tsx
@@ -310,7 +317,16 @@ npx literal-i18n extract --watch
 
 When `withLiteralI18n` is used, development mode starts the internal watcher by default. It scans once on startup and again on source changes. With explicit `next dev --webpack`, extraction uses the webpack watch hook by default; set `devWatch: true` if startup scanning is still required.
 
-In production builds, `withLiteralI18n` automatically adds JSON files under `localeDir` and the root `literal-i18n.config.*` file to Next.js `outputFileTracingIncludes['/*']`. This matters for Vercel/serverless deployments: the server runtime reads `src/messages/{locale}.json`, `source-map.json`, `manifest.json`, and runtime config through `fs.readFileSync`; if Output File Tracing does not include them in the function bundle, production falls back to source English copy. If your config file uses a non-default path, pass `configPath` to the plugin.
+`withLiteralI18n` syncs JSON files from `localeDir` to `public/literal-i18n/messages` by default. Next.js publishes the `public` directory as static assets, so `public/literal-i18n/messages/zh.json` is available at `/literal-i18n/messages/zh.json` without manually uploading `src/messages`.
+
+Runtime read order:
+
+- Development reads `localeDir` first so local extraction updates are visible immediately, then falls back to `public/literal-i18n/messages`.
+- Production reads `public/literal-i18n/messages` first to avoid unnecessary source-directory IO, then falls back to `localeDir` for compatibility.
+
+Set `publicRuntime: false` in `withLiteralI18n` / `literal-i18n.config.*` to disable the public static copy. Set `publicRuntimeDir` to change the public subdirectory; the default is `literal-i18n/messages`.
+
+`npx literal-i18n init --yes` adds `/public/literal-i18n/messages` to `.gitignore`. This directory is a generated runtime copy and does not need to be maintained by hand.
 
 ### Next.js Plugin
 
@@ -352,17 +368,20 @@ export function middleware(request: NextRequest) {
 }
 ```
 
-The middleware/proxy only forwards the current pathname through a request header. It does not read JSON or translate. Message pruning happens inside `getI18nProviderProps(locale)`.
+The middleware/proxy only forwards the current pathname and locale through request headers. It does not read JSON or translate. Message pruning happens inside `getI18nProviderProps(locale)`, and Server Component `<T />` also uses these headers to infer the current request locale.
 
-If your project has no other middleware, use `literalI18nMiddleware(request, NextResponse)` directly. You do not need to import `LITERAL_I18N_PATHNAME_HEADER` manually.
+If your project has no other middleware, use `literalI18nMiddleware(request, NextResponse)` directly. You do not need to import header constants manually.
 
-If the project already has next-intl or custom middleware, merge literal-i18n's pathname header into the same request. In this case, `LITERAL_I18N_PATHNAME_HEADER` is required:
+If the project already has next-intl or custom middleware, merge literal-i18n's pathname and locale headers into the same request. In this case, `LITERAL_I18N_PATHNAME_HEADER` and `LITERAL_I18N_LOCALE_HEADER` are required:
 
 ```ts
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import createMiddleware from 'next-intl/middleware';
-import { LITERAL_I18N_PATHNAME_HEADER } from 'literal-i18n/middleware';
+import {
+  LITERAL_I18N_LOCALE_HEADER,
+  LITERAL_I18N_PATHNAME_HEADER,
+} from 'literal-i18n/middleware';
 
 const intlMiddleware = createMiddleware({
   locales: ['en', 'zh'],
@@ -372,7 +391,9 @@ const intlMiddleware = createMiddleware({
 
 export function middleware(request: NextRequest) {
   const requestHeaders = new Headers(request.headers);
+  const locale = request.nextUrl.pathname.split('/').filter(Boolean)[0];
   requestHeaders.set(LITERAL_I18N_PATHNAME_HEADER, request.nextUrl.pathname);
+  if (locale) requestHeaders.set(LITERAL_I18N_LOCALE_HEADER, locale);
 
   return intlMiddleware(
     new NextRequest(request, {
@@ -382,15 +403,15 @@ export function middleware(request: NextRequest) {
 }
 ```
 
-If you have `_rsc`, static asset allowlists, rewrites, or any early-return branch, make sure page requests that need pruning do not bypass this header. Otherwise `getI18nProviderProps(locale)` cannot read pathname and will fall back to full messages.
+If you have `_rsc`, static asset allowlists, rewrites, or any early-return branch, make sure page requests that need pruning and server translation do not bypass these headers. Otherwise runtime helpers may miss pathname/locale and fall back.
 
 ### Current-Route Runtime Pruning
 
-Extraction generates `src/messages/manifest.json`, which records App Router routes and the message keys used by each route.
+Extraction generates `src/messages/manifest.json`, which records App Router routes, the message keys used by each route, and `clientKeys` required by Client Components.
 
-By default, `getI18nProviderProps(locale)` returns only the messages needed by the route that matches the current pathname. Page A's initial HTML/RSC payload will not include translations from page B or page B/_components.
+By default, `getI18nProviderProps(locale)` returns only the messages needed by the route that matches the current pathname, plus `clientKeys`. Page A's initial HTML/RSC payload will not include page B's server-only copy, but it can include copy required by Client Components that must run in the browser.
 
-If `I18nProvider` lives in a persistent layout, a client navigation from page A to page B uses `/api/literal-i18n/messages?locale=zh&pathname=/zh/create` by default to supplement the current route messages and merge them into the existing provider state. This keeps the initial payload strictly pruned; if you want to hide the brief route-message supplement phase, use the loading callback or fallback.
+During client navigation from page A to page B, Server Component copy arrives with the target route's RSC payload, while Client Component copy is already available through `clientKeys`. `/api/literal-i18n/messages?locale=zh&pathname=/zh/create` remains as a compatibility fallback for custom loaders, older projects, and unusual dynamic cases.
 
 `init` creates the default API route automatically. Existing projects can add it manually:
 
@@ -415,7 +436,7 @@ Use a custom loader when you need your own auth, cache, or gateway behavior:
 </I18nProvider>
 ```
 
-If you only need to change the default endpoint, pass `messageEndpoint="/custom/messages"`. `routeMessagesFallback` replaces children while route messages are loading; `routeMessagesFallbackCloseDelayMs` controls how long the fallback stays visible after route messages finish loading, defaulting to `0`. If you want a global overlay while keeping children mounted, use `onRouteMessagesLoadingChange` and render the overlay yourself.
+If you only need to change the default endpoint, pass `messageEndpoint="/custom/messages"`. `routeMessagesFallback` replaces children while fallback route messages are loading; `routeMessagesFallbackCloseDelayMs` controls how long the fallback stays visible after route messages finish loading, defaulting to `0`. If you want a global overlay while keeping children mounted, use `onRouteMessagesLoadingChange` and render the overlay yourself.
 
 `getI18nProviderProps(locale)` prunes messages through the manifest when:
 
@@ -625,6 +646,8 @@ In Next.js 16 / Turbopack, translation file updates may require a manual page re
 Common options for `getI18nProviderProps` / `getTranslator` / `getLocaleTranslator`:
 
 - `localeDir`: message directory, default `src/messages`.
+- `publicRuntime`: enable the public static runtime copy, default `true`.
+- `publicRuntimeDir`: public subdirectory for the runtime copy, default `literal-i18n/messages`.
 - `sourceMap`: manually provided source map.
 - `includeSourceMap`: only for `getI18nProviderProps`, default `false`.
 - `optimizePayload`: only for `getI18nProviderProps`, default `true`.
@@ -643,6 +666,7 @@ Common options for `getI18nProviderProps` / `getTranslator` / `getLocaleTranslat
 
 - `literalI18nMiddleware(request, NextResponse)`
 - `LITERAL_I18N_PATHNAME_HEADER`
+- `LITERAL_I18N_LOCALE_HEADER`
 
 ### `literal-i18n/next`
 
@@ -657,6 +681,8 @@ Common options:
 - `sourceMapOutput`
 - `manifestOutput`
 - `localeDir`
+- `publicRuntime`
+- `publicRuntimeDir`
 - `locales`
 - `sourceLocale`
 - `keyMode` / `idPrefix` / `idLength`
@@ -691,6 +717,7 @@ See [CHANGELOG.md](CHANGELOG.md).
 Highlights in `0.2.9`:
 
 - Fixed `useInsertionEffect must not schedule updates` during Next.js client navigation by deferring route-supplement state updates from patched history listeners.
+- Syncs runtime JSON to `public/literal-i18n/messages` by default, and production runtime reads that public static copy before falling back to `src/messages`.
 - Keeps the `0.2.6` strict current-route initial payload pruning, client route message supplements, default `/api/literal-i18n/messages` route handler, and `literal-i18n/client-loader`.
 
 ## Questions And Issues

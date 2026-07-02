@@ -2,8 +2,6 @@
 
 import {
   createContext,
-  Fragment,
-  isValidElement,
   type Context,
   type ReactNode,
   useContext,
@@ -12,7 +10,6 @@ import {
   useRef,
   useState,
 } from 'react';
-import { PLACEHOLDER_PATTERN, stringifyParam, type TranslateParamValue } from './format';
 import {
   createTranslator,
   defaultTranslate,
@@ -25,6 +22,7 @@ import {
   normalizeLoadedMessages,
   type LoadMessagesHook,
 } from './client-loader';
+import { formatReactMessage, type TProps, type TranslateNodeParams } from './react-format';
 
 interface I18nContextValue {
   locale?: string;
@@ -48,15 +46,6 @@ export interface I18nProviderProps extends MessageIdOptions {
   routeMessagesFallback?: ReactNode;
   routeMessagesFallbackCloseDelayMs?: number;
 }
-
-export type TProps = {
-  text: string;
-  id?: string;
-  params?: TranslateNodeParams;
-};
-
-type TranslateNodeParamValue = TranslateParamValue | ReactNode;
-type TranslateNodeParams = Record<string, TranslateNodeParamValue>;
 
 const I18N_CONTEXT_GLOBAL_KEY = '__literal_i18n_context__';
 
@@ -139,7 +128,10 @@ export function I18nProvider({
   routeMessagesFallback,
   routeMessagesFallbackCloseDelayMs = 0,
 }: I18nProviderProps) {
-  const [runtimeMessages, setRuntimeMessages] = useState<TranslationMessages | null | undefined>(messages);
+  const [supplementState, setSupplementState] = useState<{
+    locale?: string;
+    messages: TranslationMessages;
+  }>({ locale, messages: {} });
   const [pathname, setPathname] = useState<string | undefined>(() => getCurrentPathname());
   const [routeMessagesLoading, setRouteMessagesLoading] = useState(false);
   const lastLoadedPathnameRef = useRef<string | undefined>(pathname);
@@ -168,7 +160,6 @@ export function I18nProvider({
   }
 
   useEffect(() => {
-    setRuntimeMessages(messages);
     loadedPathnamesRef.current = new Set(pathname ? [pathname] : []);
     activeRouteLoadRef.current = null;
     closeRouteMessagesLoading();
@@ -214,9 +205,12 @@ export function I18nProvider({
         const loadedMessages = normalizeLoadedMessages(payload);
         if (!loadedMessages) return;
         loadedPathnamesRef.current.add(pathname);
-        setRuntimeMessages((currentMessages) => ({
-          ...(currentMessages ?? {}),
-          ...loadedMessages,
+        setSupplementState((current) => ({
+          locale,
+          messages: {
+            ...(current.locale === locale ? current.messages : {}),
+            ...loadedMessages,
+          },
         }));
       })
       .catch(() => {
@@ -234,12 +228,22 @@ export function I18nProvider({
     };
   }, [locale, messageEndpoint, pathname, routeMessagesLoader]);
 
+  const effectiveMessages = useMemo<TranslationMessages | null | undefined>(() => {
+    const supplementMessages = supplementState.locale === locale ? supplementState.messages : {};
+    if (!messages && Object.keys(supplementMessages).length === 0) return messages;
+
+    return {
+      ...supplementMessages,
+      ...(messages ?? {}),
+    };
+  }, [locale, messages, supplementState]);
+
   const contextValue = useMemo<I18nContextValue>(() => {
     return {
       locale,
-      translate: translate ?? createTranslator({ locale, messages: runtimeMessages, sourceMap, keyMode, idPrefix, idLength }),
+      translate: translate ?? createTranslator({ locale, messages: effectiveMessages, sourceMap, keyMode, idPrefix, idLength }),
     };
-  }, [idLength, idPrefix, keyMode, locale, runtimeMessages, sourceMap, translate]);
+  }, [effectiveMessages, idLength, idPrefix, keyMode, locale, sourceMap, translate]);
 
   const renderedChildren = routeMessagesLoading && routeMessagesFallback !== undefined
     ? routeMessagesFallback
@@ -276,45 +280,4 @@ export function T({
   return <>{formatReactMessage(translated, mergedParams)}</>;
 }
 
-function isRenderableNode(value: unknown): value is ReactNode {
-  return isValidElement(value) || Array.isArray(value);
-}
-
-function toTextNode(value: TranslateNodeParamValue): ReactNode {
-  if (isRenderableNode(value)) return value;
-  return stringifyParam(value as TranslateParamValue) ?? '';
-}
-
-function formatReactMessage(text: string, params?: TranslateNodeParams): ReactNode {
-  if (!params) return text;
-
-  const nodes: ReactNode[] = [];
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-  PLACEHOLDER_PATTERN.lastIndex = 0;
-
-  while ((match = PLACEHOLDER_PATTERN.exec(text))) {
-    const [placeholder, name] = match;
-    if (match.index > lastIndex) {
-      nodes.push(text.slice(lastIndex, match.index));
-    }
-
-    if (Object.prototype.hasOwnProperty.call(params, name)) {
-      nodes.push(
-        <Fragment key={`${name}-${match.index}`}>
-          {toTextNode(params[name])}
-        </Fragment>,
-      );
-    } else {
-      nodes.push(placeholder);
-    }
-
-    lastIndex = match.index + placeholder.length;
-  }
-
-  if (lastIndex < text.length) {
-    nodes.push(text.slice(lastIndex));
-  }
-
-  return nodes.length === 1 ? nodes[0] : nodes;
-}
+export type { TProps } from './react-format';

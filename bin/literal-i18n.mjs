@@ -22,6 +22,7 @@ const NEXT_CONFIG_FILES = [
   'next.config.js',
   'next.config.cjs',
 ];
+const DEFAULT_PUBLIC_RUNTIME_GITIGNORE_ENTRY = '/public/literal-i18n/messages';
 
 function parseArgs(argv) {
   const command = argv[0] && !argv[0].startsWith('-') ? argv[0] : 'help';
@@ -270,6 +271,26 @@ function createMessagesRouteContent() {
 `;
 }
 
+function createGitignoreUpdate(cwd, entry) {
+  const filePath = path.join(cwd, '.gitignore');
+  const current = existsSync(filePath) ? readFileSync(filePath, 'utf8') : '';
+  const lines = current
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (lines.includes(entry)) {
+    return undefined;
+  }
+
+  const separator = current && !current.endsWith('\n') ? '\n' : '';
+  return {
+    filePath,
+    content: `${current}${separator}${entry}\n`,
+    exists: Boolean(current),
+  };
+}
+
 function maybeWrapNextConfig(content, nextConfigPath, configPath) {
   if (content.includes('withLiteralI18n(')) {
     return { status: 'skip', content, reason: 'next.config already uses withLiteralI18n.' };
@@ -402,6 +423,19 @@ function planInit(cwd, options) {
     title: `Ensure ${path.relative(cwd, messagesDir)} directory`,
     dirPath: messagesDir,
   });
+
+  const gitignoreUpdate = createGitignoreUpdate(cwd, DEFAULT_PUBLIC_RUNTIME_GITIGNORE_ENTRY);
+  if (gitignoreUpdate) {
+    actions.push({
+      type: 'write',
+      title: `${gitignoreUpdate.exists ? 'Update' : 'Create'} .gitignore for public runtime artifacts`,
+      filePath: gitignoreUpdate.filePath,
+      content: gitignoreUpdate.content,
+      overwrite: gitignoreUpdate.exists,
+    });
+  } else {
+    actions.push({ type: 'skip', title: '.gitignore already ignores public runtime artifacts' });
+  }
 
   actions.push({
     type: 'write-if-missing',

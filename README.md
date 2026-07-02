@@ -99,6 +99,13 @@ export default async function LocaleLayout({
 }
 ```
 
+同一个 `import { T } from 'literal-i18n'` 会根据运行环境自动切换实现：
+
+- Server Component 中的 `<T />` 使用 server 版实现，在 RSC 渲染阶段直接输出目标语言文本。
+- Client Component 中的 `<T />` 使用 client 版实现，从 `I18nProvider` 读取 messages。
+
+这意味着软跳到目标页面时，Server Component 文案会随目标页面 RSC payload 一起到达，不需要等待额外的客户端补包请求。
+
 获取当前语言：
 
 ```tsx
@@ -310,7 +317,16 @@ npx literal-i18n extract --watch
 
 使用 `withLiteralI18n` 时，开发态默认会启动内置 watcher。它会在项目启动时扫描一次，源码变化时增量扫描一次。显式使用 `next dev --webpack` 时，默认改由 webpack watch hook 抽取；如果仍想启动时立即扫描，可以配置 `devWatch: true`。
 
-生产构建时，`withLiteralI18n` 会自动把 `localeDir` 下的 JSON 文件和项目根部的 `literal-i18n.config.*` 加入 Next.js `outputFileTracingIncludes['/*']`。这对 Vercel/serverless 部署很重要：服务端运行时会通过 `fs.readFileSync` 读取 `src/messages/{locale}.json`、`source-map.json`、`manifest.json` 和运行时配置；如果没有被 Output File Tracing 打进函数包，生产环境会回退显示英文原文。配置文件如果不在默认路径，可以给插件传 `configPath`。
+`withLiteralI18n` 默认会把 `localeDir` 下的 JSON 文件同步到 `public/literal-i18n/messages`。Next.js 会把 `public` 目录作为静态资源发布，因此 `public/literal-i18n/messages/zh.json` 会以 `/literal-i18n/messages/zh.json` 暴露，不需要额外上传 `src/messages`。
+
+运行时读取顺序：
+
+- 开发环境优先读 `localeDir`，保证本地抽取后的 JSON 立即生效；如果不存在，再读 `public/literal-i18n/messages`。
+- 生产环境优先读 `public/literal-i18n/messages`，避免先访问源码目录造成无意义 IO；如果静态副本不存在，再兼容回退到 `localeDir`。
+
+如果你不想生成 public 静态副本，可以在 `withLiteralI18n` / `literal-i18n.config.*` 中设置 `publicRuntime: false`。也可以用 `publicRuntimeDir` 修改静态副本目录，默认值是 `literal-i18n/messages`。
+
+`npx literal-i18n init --yes` 会把 `/public/literal-i18n/messages` 加入 `.gitignore`。这份目录是构建/开发时生成的运行时副本，不需要手动维护。
 
 ### Next.js 插件
 
@@ -352,17 +368,20 @@ export function middleware(request: NextRequest) {
 }
 ```
 
-middleware/proxy 只把当前 pathname 写入 request header，不读取 JSON，不做翻译。真正的消息裁剪发生在 `getI18nProviderProps(locale)` 内部。
+middleware/proxy 只把当前 pathname 和 locale 写入 request header，不读取 JSON，不做翻译。真正的消息裁剪发生在 `getI18nProviderProps(locale)` 内部；Server Component 里的 `<T />` 也会用这些 header 推断当前请求语言。
 
-如果你的项目没有其他 middleware，直接使用 `literalI18nMiddleware(request, NextResponse)` 即可，不需要手动 import `LITERAL_I18N_PATHNAME_HEADER`。
+如果你的项目没有其他 middleware，直接使用 `literalI18nMiddleware(request, NextResponse)` 即可，不需要手动 import header 常量。
 
-如果项目已经有 next-intl 或自定义 middleware，需要把 literal-i18n 的 pathname header 合并进同一个 request。此时 `LITERAL_I18N_PATHNAME_HEADER` 是必须的：
+如果项目已经有 next-intl 或自定义 middleware，需要把 literal-i18n 的 pathname 和 locale header 合并进同一个 request。此时 `LITERAL_I18N_PATHNAME_HEADER` 和 `LITERAL_I18N_LOCALE_HEADER` 是必须的：
 
 ```ts
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import createMiddleware from 'next-intl/middleware';
-import { LITERAL_I18N_PATHNAME_HEADER } from 'literal-i18n/middleware';
+import {
+  LITERAL_I18N_LOCALE_HEADER,
+  LITERAL_I18N_PATHNAME_HEADER,
+} from 'literal-i18n/middleware';
 
 const intlMiddleware = createMiddleware({
   locales: ['en', 'zh'],
@@ -372,7 +391,9 @@ const intlMiddleware = createMiddleware({
 
 export function middleware(request: NextRequest) {
   const requestHeaders = new Headers(request.headers);
+  const locale = request.nextUrl.pathname.split('/').filter(Boolean)[0];
   requestHeaders.set(LITERAL_I18N_PATHNAME_HEADER, request.nextUrl.pathname);
+  if (locale) requestHeaders.set(LITERAL_I18N_LOCALE_HEADER, locale);
 
   return intlMiddleware(
     new NextRequest(request, {
@@ -382,15 +403,15 @@ export function middleware(request: NextRequest) {
 }
 ```
 
-如果你有 `_rsc`、静态资源白名单、rewrite 或其他提前返回分支，也要保证需要裁剪的页面请求不会绕过这个 header；否则 `getI18nProviderProps(locale)` 会因为拿不到 pathname 而回退全量 messages。
+如果你有 `_rsc`、静态资源白名单、rewrite 或其他提前返回分支，也要保证需要裁剪和 server 翻译的页面请求不会绕过这些 header；否则运行时会因为拿不到 pathname/locale 而回退。
 
 ### 运行时按当前路由裁剪
 
-抽取时会生成 `src/messages/manifest.json`，记录 App Router 路由和该路由下使用到的 message key。
+抽取时会生成 `src/messages/manifest.json`，记录 App Router 路由、该路由下使用到的 message key，以及所有 Client Component 运行必需的 `clientKeys`。
 
-默认情况下，`getI18nProviderProps(locale)` 只返回当前 pathname 匹配路由需要的 messages。页面 A 的首屏 HTML/RSC payload 不会包含页面 B 或页面 B/_components 的翻译。
+默认情况下，`getI18nProviderProps(locale)` 只返回当前 pathname 匹配路由需要的 messages，再加上 `clientKeys`。页面 A 的首屏 HTML/RSC payload 不会包含页面 B 的 server-only 文案，但会包含 Client Component 在浏览器中运行必需的文案。
 
-如果 `I18nProvider` 放在持久 layout 中，客户端从页面 A 软跳到页面 B 时，Provider 会默认通过 `/api/literal-i18n/messages?locale=zh&pathname=/zh/create` 补充当前路由 messages，并与已有 messages 合并。这样首屏仍然严格裁剪；如果担心软跳补包期间出现短暂原文，可以使用 loading 回调或 fallback 遮住过渡阶段。
+客户端从页面 A 软跳到页面 B 时，Server Component 文案会跟随目标页面 RSC payload 返回；Client Component 文案由 `clientKeys` 保证提前存在。`/api/literal-i18n/messages?locale=zh&pathname=/zh/create` 仍然保留为兼容兜底，用于自定义 loader、旧项目或特殊动态场景。
 
 `init` 会自动生成默认 API route。已有项目可以手动添加：
 
@@ -415,7 +436,7 @@ export { literalI18nMessagesGET as GET } from 'literal-i18n/server';
 </I18nProvider>
 ```
 
-如果只是改默认 endpoint，可以传 `messageEndpoint="/custom/messages"`。`routeMessagesFallback` 会在软跳补包期间替换 children；`routeMessagesFallbackCloseDelayMs` 控制补包完成后 fallback 延迟关闭时间，默认 `0`。如果你想做全局遮罩并保留 children 挂载状态，可以只使用 `onRouteMessagesLoadingChange` 自己渲染 overlay。
+如果只是改默认 endpoint，可以传 `messageEndpoint="/custom/messages"`。`routeMessagesFallback` 会在兜底补包期间替换 children；`routeMessagesFallbackCloseDelayMs` 控制补包完成后 fallback 延迟关闭时间，默认 `0`。如果你想做全局遮罩并保留 children 挂载状态，可以只使用 `onRouteMessagesLoadingChange` 自己渲染 overlay。
 
 当以下条件同时满足时，`getI18nProviderProps(locale)` 会根据 manifest 裁剪 messages：
 
@@ -625,6 +646,8 @@ Next.js 16 / Turbopack 下，翻译文件更新后页面可能需要手动刷新
 `getI18nProviderProps` / `getTranslator` / `getLocaleTranslator` 常用 options：
 
 - `localeDir`：消息目录，默认 `src/messages`。
+- `publicRuntime`：是否启用 public 静态运行时副本，默认 `true`。
+- `publicRuntimeDir`：public 下的静态副本目录，默认 `literal-i18n/messages`。
 - `sourceMap`：手动传入 source map。
 - `includeSourceMap`：仅 `getI18nProviderProps` 使用，默认 `false`。
 - `optimizePayload`：仅 `getI18nProviderProps` 使用，默认 `true`。
@@ -643,6 +666,7 @@ Next.js 16 / Turbopack 下，翻译文件更新后页面可能需要手动刷新
 
 - `literalI18nMiddleware(request, NextResponse)`
 - `LITERAL_I18N_PATHNAME_HEADER`
+- `LITERAL_I18N_LOCALE_HEADER`
 
 ### `literal-i18n/next`
 
@@ -657,6 +681,8 @@ Next.js 16 / Turbopack 下，翻译文件更新后页面可能需要手动刷新
 - `sourceMapOutput`
 - `manifestOutput`
 - `localeDir`
+- `publicRuntime`
+- `publicRuntimeDir`
 - `locales`
 - `sourceLocale`
 - `keyMode` / `idPrefix` / `idLength`
@@ -691,6 +717,7 @@ Next.js 16 / Turbopack 下，翻译文件更新后页面可能需要手动刷新
 `0.2.9` 的重点：
 
 - 修复 Next.js 客户端切换页面时，补包监听同步触发状态更新导致 `useInsertionEffect must not schedule updates` 的问题。
+- 默认把运行时 JSON 同步到 `public/literal-i18n/messages`，生产运行时优先读取 public 静态副本，减少部署环境对 `src/messages` 的依赖。
 - 继续保留 `0.2.6` 的严格当前路由首屏剪枝、客户端路由补包、默认 `/api/literal-i18n/messages` route handler 和 `literal-i18n/client-loader`。
 
 ## 疑问提交

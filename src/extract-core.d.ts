@@ -14,6 +14,7 @@ export interface ExtractFileResult {
   records: ExtractRecord[];
   warnings: ExtractWarning[];
   imports: string[];
+  client: boolean;
 }
 
 export interface ExtractWarning {
@@ -67,6 +68,7 @@ export interface ExtractResult {
       };
     }>;
     routes: Record<string, string[]>;
+    clientKeys: string[];
   };
   records: ExtractRecord[];
   sourceChanged: boolean;
@@ -105,7 +107,7 @@ export declare function extractFromSource(
 ): ExtractFileResult;
 
 export declare function buildRuntimeManifest(
-  recordsByFile: Record<string, { records: ExtractRecord[]; imports?: string[] }>,
+  recordsByFile: Record<string, { records: ExtractRecord[]; imports?: string[]; client?: boolean }>,
   options?: LiteralI18nExtractorOptions,
 ): ExtractResult['manifest'];
 

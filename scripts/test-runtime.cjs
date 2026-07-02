@@ -208,6 +208,86 @@ async function testHashRuntimeContract() {
   }
 }
 
+async function testClientKeysWithoutNavigationPayload() {
+  const cwd = createTempProject('client-keys');
+  try {
+    const recordsByFile = {
+      'src/app/[locale]/page.tsx': {
+        records: [
+          { text: 'Home server title', kind: 'component', file: 'src/app/[locale]/page.tsx', line: 1, column: 1 },
+        ],
+        imports: [],
+      },
+      'src/app/[locale]/create/page.tsx': {
+        records: [
+          { text: 'Create server title', kind: 'component', file: 'src/app/[locale]/create/page.tsx', line: 1, column: 1 },
+        ],
+        imports: ['src/app/[locale]/create/client-panel.tsx'],
+      },
+      'src/app/[locale]/create/client-panel.tsx': {
+        client: true,
+        records: [
+          { text: 'Create client action', kind: 'component', file: 'src/app/[locale]/create/client-panel.tsx', line: 1, column: 1 },
+        ],
+        imports: ['src/components/shared-client.tsx'],
+      },
+      'src/components/shared-client.tsx': {
+        records: [
+          { text: 'Shared client label', kind: 'component', file: 'src/components/shared-client.tsx', line: 1, column: 1 },
+        ],
+        imports: [],
+      },
+    };
+    const options = {
+      cwd,
+      keyMode: 'hash',
+      idPrefix: 'm_',
+      idLength: 16,
+    };
+    const records = Object.values(recordsByFile).flatMap((entry) => entry.records);
+    const artifacts = buildSourceArtifacts(records, options);
+    const manifest = buildRuntimeManifest(recordsByFile, options);
+    const translatedMessages = Object.fromEntries(
+      Object.entries(artifacts.sourceMessages).map(([key, value]) => [key, `zh:${value}`]),
+    );
+
+    fs.mkdirSync(path.join(cwd, 'src/messages'), { recursive: true });
+    fs.writeFileSync(
+      path.join(cwd, 'literal-i18n.config.cjs'),
+      `module.exports = {
+  localeDir: 'src/messages',
+  keyMode: 'hash',
+  idPrefix: 'm_',
+  idLength: 16,
+};
+`,
+    );
+    writeJson(path.join(cwd, 'src/messages/zh.json'), translatedMessages);
+    writeJson(path.join(cwd, 'src/messages/source-map.json'), artifacts.sourceMap);
+    writeJson(path.join(cwd, 'src/messages/manifest.json'), manifest);
+
+    assert.deepEqual(manifest.clientKeys.sort(), [
+      artifacts.sourceMap['Create client action'],
+      artifacts.sourceMap['Shared client label'],
+    ].sort());
+
+    const previousCwd = process.cwd();
+    process.chdir(cwd);
+    try {
+      const server = await import(`../dist/server.js?clientKeys=${Date.now()}`);
+      const homeProps = await server.getI18nProviderProps('zh', { pathname: '/zh' });
+      assert.equal(homeProps.messages[artifacts.sourceMap['Home server title']], 'zh:Home server title');
+      assert.equal(homeProps.messages[artifacts.sourceMap['Create client action']], 'zh:Create client action');
+      assert.equal(homeProps.messages[artifacts.sourceMap['Shared client label']], 'zh:Shared client label');
+      assert.equal(homeProps.messages[artifacts.sourceMap['Create server title']], undefined);
+    } finally {
+      process.chdir(previousCwd);
+    }
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
 async function testClientRouteMessagesLoader() {
   const previousWindow = globalThis.window;
   const previousFetch = globalThis.fetch;
@@ -263,6 +343,125 @@ async function testClientRouteMessagesLoader() {
   }
 }
 
+async function testPublicRuntimeFallback() {
+  const cwd = createTempProject('public-runtime');
+  try {
+    const recordsByFile = {
+      'src/app/[locale]/page.tsx': {
+        records: [
+          { text: 'Public title', kind: 'component', file: 'src/app/[locale]/page.tsx', line: 1, column: 1 },
+        ],
+        imports: [],
+      },
+    };
+    const options = {
+      cwd,
+      keyMode: 'hash',
+      idPrefix: 'm_',
+      idLength: 16,
+    };
+    const records = Object.values(recordsByFile).flatMap((entry) => entry.records);
+    const artifacts = buildSourceArtifacts(records, options);
+    const manifest = buildRuntimeManifest(recordsByFile, options);
+    const publicRuntimeDir = path.join(cwd, 'public/literal-i18n/messages');
+
+    writeJson(path.join(publicRuntimeDir, 'zh.json'), Object.fromEntries(
+      Object.entries(artifacts.sourceMessages).map(([key, value]) => [key, `zh:${value}`]),
+    ));
+    writeJson(path.join(publicRuntimeDir, 'source-map.json'), artifacts.sourceMap);
+    writeJson(path.join(publicRuntimeDir, 'manifest.json'), manifest);
+
+    const previousCwd = process.cwd();
+    process.chdir(cwd);
+    try {
+      const server = await import(`../dist/server.js?publicRuntime=${Date.now()}`);
+      const props = await server.getI18nProviderProps('zh', { pathname: '/zh' });
+      const titleKey = artifacts.sourceMap['Public title'];
+      assert.equal(props.messages[titleKey], 'zh:Public title');
+    } finally {
+      process.chdir(previousCwd);
+    }
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
+async function testProductionPublicRuntimePriority() {
+  const cwd = createTempProject('public-runtime-priority');
+  const previousEnv = process.env.NODE_ENV;
+  try {
+    const sourceMap = { 'Runtime title': 'm_runtime_title' };
+    const manifest = {
+      version: 1,
+      files: {
+        'src/app/[locale]/page.tsx': {
+          keys: ['m_runtime_title'],
+          route: { pattern: '/[locale]', kind: 'page' },
+        },
+      },
+      routes: {
+        '/[locale]': ['m_runtime_title'],
+      },
+    };
+
+    writeJson(path.join(cwd, 'src/messages/zh.json'), {
+      m_runtime_title: 'src:Runtime title',
+    });
+    writeJson(path.join(cwd, 'src/messages/source-map.json'), sourceMap);
+    writeJson(path.join(cwd, 'src/messages/manifest.json'), manifest);
+    writeJson(path.join(cwd, 'public/literal-i18n/messages/zh.json'), {
+      m_runtime_title: 'public:Runtime title',
+    });
+    writeJson(path.join(cwd, 'public/literal-i18n/messages/source-map.json'), sourceMap);
+    writeJson(path.join(cwd, 'public/literal-i18n/messages/manifest.json'), manifest);
+
+    const previousCwd = process.cwd();
+    process.chdir(cwd);
+    try {
+      const server = await import(`../dist/server.js?publicRuntimePriority=${Date.now()}`);
+
+      process.env.NODE_ENV = 'development';
+      const devProps = await server.getI18nProviderProps('zh', { pathname: '/zh' });
+      assert.equal(devProps.messages.m_runtime_title, 'src:Runtime title');
+
+      process.env.NODE_ENV = 'production';
+      const productionProps = await server.getI18nProviderProps('zh', { pathname: '/zh' });
+      assert.equal(productionProps.messages.m_runtime_title, 'public:Runtime title');
+    } finally {
+      process.chdir(previousCwd);
+    }
+  } finally {
+    if (previousEnv === undefined) {
+      delete process.env.NODE_ENV;
+    } else {
+      process.env.NODE_ENV = previousEnv;
+    }
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
+function createMockCompiler(context) {
+  return {
+    context,
+    hooks: {
+      beforeRun: {
+        handler: undefined,
+        tapPromise(_name, handler) {
+          this.handler = handler;
+        },
+      },
+      watchRun: {
+        tapPromise() {},
+      },
+      afterCompile: {
+        tap(_name, handler) {
+          handler({ contextDependencies: new Set() });
+        },
+      },
+    },
+  };
+}
+
 async function testNextPluginDevWatchFallback() {
   const watcherCwd = createTempProject('dev-watch-intended');
   const compilerCwd = createTempProject('dev-watch-compiler');
@@ -272,6 +471,17 @@ async function testNextPluginDevWatchFallback() {
     fs.mkdirSync(path.join(watcherCwd, 'src'), { recursive: true });
     fs.mkdirSync(path.join(compilerCwd, 'src'), { recursive: true });
     fs.writeFileSync(path.join(watcherCwd, 'literal-i18n.config.cjs'), 'module.exports = {};\n');
+    writeJson(path.join(watcherCwd, 'src/messages/en.json'), {
+      copied_from_config_load: 'Copied from config load',
+    });
+    writeJson(path.join(watcherCwd, 'artifacts/source-map.json'), {
+      'Copied from config load': 'copied_from_config_load',
+    });
+    writeJson(path.join(watcherCwd, 'artifacts/manifest.json'), {
+      version: 1,
+      routes: {},
+      files: {},
+    });
 
     const withLiteralI18n = require('../src/next-plugin.cjs');
     const config = withLiteralI18n({
@@ -287,25 +497,44 @@ async function testNextPluginDevWatchFallback() {
       silent: true,
       sourceDir: 'src',
       sourceLocale: 'en',
-      sourceMapOutput: 'src/messages/source-map.json',
+      sourceMapOutput: 'artifacts/source-map.json',
+      manifestOutput: 'artifacts/manifest.json',
       sourceOutput: 'src/messages/en.json',
     });
     assert.deepEqual(config.outputFileTracingIncludes['/*'], [
       './existing/**/*.json',
-      './src/messages/**/*.json',
-      './literal-i18n.config.cjs',
     ]);
     assert.deepEqual(config.outputFileTracingIncludes['/api/custom'], ['./custom/**/*.txt']);
+    assert.equal(
+      fs.existsSync(path.join(watcherCwd, 'public/literal-i18n/messages/en.json')),
+      true,
+    );
+    assert.equal(
+      fs.existsSync(path.join(watcherCwd, 'public/literal-i18n/messages/source-map.json')),
+      true,
+    );
+    assert.equal(
+      fs.existsSync(path.join(watcherCwd, 'public/literal-i18n/messages/manifest.json')),
+      true,
+    );
 
     const webpackConfig = config.webpack({ plugins: [] }, { dir: compilerCwd });
     assert.equal(webpackConfig.plugins.length, 1);
     assert.equal(webpackConfig.plugins[0].skipWebpackWatchExtraction, false);
+    const compiler = createMockCompiler(compilerCwd);
+    webpackConfig.plugins[0].apply(compiler);
+    await compiler.hooks.beforeRun.handler();
+    assert.equal(
+      fs.existsSync(path.join(compilerCwd, 'public/literal-i18n/messages/en.json')),
+      true,
+    );
 
     const disabledConfig = withLiteralI18n({}, {
       cwd: compilerCwd,
       configPath: 'config/literal-i18n.runtime.cjs',
       devWatch: false,
       localeDir: 'app/i18n',
+      publicRuntime: false,
       sourceDir: 'src',
       sourceLocale: 'en',
       locales: ['en'],
@@ -327,15 +556,21 @@ async function testNextPluginDevWatchFallback() {
 
 (async () => {
   await testPropTranslatorExtraction();
-  console.log('[literal-i18n] runtime acceptance 1/5 passed: prop translator extraction');
+  console.log('[literal-i18n] runtime acceptance 1/8 passed: prop translator extraction');
   await testAliasImportRouteManifest();
-  console.log('[literal-i18n] runtime acceptance 2/5 passed: alias import route manifest');
+  console.log('[literal-i18n] runtime acceptance 2/8 passed: alias import route manifest');
   await testHashRuntimeContract();
-  console.log('[literal-i18n] runtime acceptance 3/5 passed: hash runtime contract');
+  console.log('[literal-i18n] runtime acceptance 3/8 passed: hash runtime contract');
+  await testClientKeysWithoutNavigationPayload();
+  console.log('[literal-i18n] runtime acceptance 4/8 passed: client keys without navigation payload');
   await testClientRouteMessagesLoader();
-  console.log('[literal-i18n] runtime acceptance 4/5 passed: client route messages loader');
+  console.log('[literal-i18n] runtime acceptance 5/8 passed: client route messages loader');
+  await testPublicRuntimeFallback();
+  console.log('[literal-i18n] runtime acceptance 6/8 passed: public runtime fallback');
+  await testProductionPublicRuntimePriority();
+  console.log('[literal-i18n] runtime acceptance 7/8 passed: production public runtime priority');
   await testNextPluginDevWatchFallback();
-  console.log('[literal-i18n] runtime acceptance 5/5 passed: dev watch webpack fallback');
+  console.log('[literal-i18n] runtime acceptance 8/8 passed: dev watch webpack fallback');
 })().catch((error) => {
   console.error(error.stack || error.message);
   process.exitCode = 1;

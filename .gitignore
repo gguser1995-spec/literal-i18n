@@ -2,6 +2,9 @@ node_modules
 dist
 /messages
 /src/messages
+/public/literal-i18n/messages
+demo/public/literal-i18n/messages
+demo-next-16/public/literal-i18n/messages
 .next
 /.env*
 .env.local

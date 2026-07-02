@@ -400,6 +400,22 @@ function collectRelativeImports(sourceFile, filePath, options = {}) {
   return uniq(imports);
 }
 
+function isClientSourceFile(sourceFile) {
+  for (const statement of sourceFile.statements) {
+    if (
+      ts.isExpressionStatement(statement) &&
+      ts.isStringLiteral(statement.expression)
+    ) {
+      if (statement.expression.text === 'use client') return true;
+      continue;
+    }
+
+    return false;
+  }
+
+  return false;
+}
+
 function extractFromSource(filePath, sourceText, options = {}) {
   const importSources = options.importSources || DEFAULT_IMPORT_SOURCES;
   const serverImportSources = options.serverImportSources || DEFAULT_SERVER_IMPORT_SOURCES;
@@ -515,7 +531,7 @@ function extractFromSource(filePath, sourceText, options = {}) {
   }
 
   visit(sourceFile);
-  return { records, warnings, imports: localImports };
+  return { records, warnings, imports: localImports, client: isClientSourceFile(sourceFile) };
 }
 
 function toSourceMap(records, options = {}) {
@@ -600,6 +616,7 @@ function buildRuntimeManifest(recordsByFile, options = {}) {
   const routes = {};
   const directKeysByFile = new Map();
   const importsByFile = new Map();
+  const clientRoots = new Set();
 
   for (const [filePath, entry] of Object.entries(recordsByFile)) {
     const records = entry.records || [];
@@ -608,6 +625,7 @@ function buildRuntimeManifest(recordsByFile, options = {}) {
       sortKeys(records.map((record) => getMessageKey(record.text, { ...options, id: record.id }))),
     );
     importsByFile.set(filePath, Array.isArray(entry.imports) ? entry.imports : []);
+    if (entry.client === true) clientRoots.add(filePath);
   }
 
   const collectKeysForFile = (filePath, seen = new Set()) => {
@@ -621,6 +639,24 @@ function buildRuntimeManifest(recordsByFile, options = {}) {
 
     return sortKeys(keys);
   };
+
+  const collectClientFiles = (filePath, seen = new Set()) => {
+    if (seen.has(filePath)) return seen;
+    seen.add(filePath);
+
+    for (const importedFile of importsByFile.get(filePath) || []) {
+      collectClientFiles(importedFile, seen);
+    }
+
+    return seen;
+  };
+
+  const clientKeys = [];
+  for (const filePath of clientRoots) {
+    for (const clientFile of collectClientFiles(filePath)) {
+      clientKeys.push(...(directKeysByFile.get(clientFile) || []));
+    }
+  }
 
   for (const [filePath, entry] of Object.entries(recordsByFile)) {
     const route = getNextAppRouteInfo(filePath);
@@ -641,6 +677,7 @@ function buildRuntimeManifest(recordsByFile, options = {}) {
     version: 1,
     files,
     routes,
+    clientKeys: sortKeys(clientKeys),
   };
 }
 
@@ -683,7 +720,7 @@ class LiteralI18nExtractor {
     for (const file of files) {
       const relativePath = normalizePath(path.relative(this.options.cwd, file));
       const result = this.extractFile(file);
-      cache.files[relativePath] = { records: result.records, imports: result.imports };
+      cache.files[relativePath] = { records: result.records, imports: result.imports, client: result.client };
       warnings.push(...result.warnings);
     }
 
@@ -721,7 +758,7 @@ class LiteralI18nExtractor {
       }
 
       const result = this.extractFile(file);
-      cache.files[relativePath] = { records: result.records, imports: result.imports };
+      cache.files[relativePath] = { records: result.records, imports: result.imports, client: result.client };
       warnings.push(...result.warnings);
       changedFiles.push(file);
     }

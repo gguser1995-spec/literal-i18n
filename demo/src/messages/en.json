@@ -2,6 +2,11 @@
   "Hello {name}": "Hello {name}",
   "Items count: {count}": "Items count: {count}",
   "Language": "Language",
+  "Client create panel is ready.": "Client create panel is ready.",
+  "Create music": "Create music",
+  "Compose a new track from a short idea.": "Compose a new track from a short idea.",
+  "Home": "Home",
+  "Create": "Create",
   "Hello World": "Hello World",
   "Welcome to Literal I18n Demo": "Welcome to Literal I18n Demo",
   "This is a server component": "This is a server component"

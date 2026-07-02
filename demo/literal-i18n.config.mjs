@@ -10,6 +10,11 @@ function fallbackTranslate(input) {
     'Hello World': '你好世界',
     'Welcome to Literal I18n Demo': '欢迎使用 Literal I18n 演示',
     'Hello {name}': '你好，{name}',
+    'Home': '首页',
+    'Create': '创作',
+    'Create music': '创作音乐',
+    'Compose a new track from a short idea.': '用一个简短想法创作一首新歌。',
+    'Client create panel is ready.': '客户端创作面板已就绪。',
   };
   const result = {};
   for (const key of input.missingTexts) {

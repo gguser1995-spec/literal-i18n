@@ -1,4 +1,5 @@
 export const LITERAL_I18N_PATHNAME_HEADER = 'x-literal-i18n-pathname';
+export const LITERAL_I18N_LOCALE_HEADER = 'x-literal-i18n-locale';
 
 export interface LiteralI18nMiddlewareRequest {
   nextUrl?: {
@@ -22,12 +23,20 @@ function getRequestPathname(request: LiteralI18nMiddlewareRequest): string {
   }
 }
 
+function getRequestLocale(pathname: string): string | undefined {
+  const locale = pathname.split('/').filter(Boolean)[0];
+  return locale || undefined;
+}
+
 export function literalI18nMiddleware(
   request: LiteralI18nMiddlewareRequest,
   nextResponse: LiteralI18nMiddlewareNextResponse,
 ): unknown {
   const requestHeaders = new Headers(request.headers);
-  requestHeaders.set(LITERAL_I18N_PATHNAME_HEADER, getRequestPathname(request));
+  const pathname = getRequestPathname(request);
+  const locale = getRequestLocale(pathname);
+  requestHeaders.set(LITERAL_I18N_PATHNAME_HEADER, pathname);
+  if (locale) requestHeaders.set(LITERAL_I18N_LOCALE_HEADER, locale);
 
   return nextResponse.next({
     request: {

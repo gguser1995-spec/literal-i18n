@@ -1,5 +1,45 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Added a `react-server` package export so `import { T } from "literal-i18n"` resolves to a server implementation inside Server Components and a client implementation inside Client Components.
+- Added `manifest.clientKeys`, generated from `'use client'` files and their local dependencies, so Client Component copy can be available during same-locale client navigation without sending every page's server-only copy.
+- Added locale forwarding through `x-literal-i18n-locale` in `literalI18nMiddleware`.
+
+### Changed
+
+- Server Component `<T />` now translates during RSC rendering, allowing translated copy to travel with the target route's RSC payload during client navigation.
+- `I18nProvider` now uses incoming `messages` props synchronously during render; client route supplements are stored only as incremental messages.
+- `getI18nProviderProps(locale)` includes current-route messages plus `clientKeys` by default, instead of relying on post-navigation client supplements as the primary path.
+
+### Tests
+
+- Added runtime coverage proving client keys are included without falling back to navigation-wide payloads.
+- Added Next.js 15 and Next.js 16 demo acceptance for client navigation with the messages API blocked, covering both Server Component and Client Component copy.
+
+## 0.2.9 (2026-07-01)
+
+### Added
+
+- Added default public runtime JSON sync from `localeDir` to `public/literal-i18n/messages` through the Next.js plugin. This lets deployments serve locale JSON, source maps, and route manifests as regular Next.js static assets.
+- Added `publicRuntime` and `publicRuntimeDir` options for configuring or disabling the public runtime copy.
+- Added init support for ignoring generated public runtime artifacts through `.gitignore`.
+
+### Changed
+
+- Production server runtime now reads `public/literal-i18n/messages` before `src/messages`, avoiding unnecessary source-directory IO on deployed servers. Development still reads `src/messages` first so local extraction updates are visible immediately.
+
+### Fixed
+
+- Fixed deployments that do not include `src/messages` in the server bundle by allowing the server runtime to load all message artifacts from the public static runtime copy.
+- Fixed server translator helpers so `getTranslator` and `getLocaleTranslator` use the same runtime store options as `getI18nProviderProps`.
+
+### Tests
+
+- Added runtime coverage for public runtime fallback, production public-first read order, and Next.js plugin public JSON sync.
+
 ## 0.2.7 (2026-06-30)
 
 ### Added
